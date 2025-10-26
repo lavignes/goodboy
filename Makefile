@@ -6,11 +6,11 @@ AR = ar
 
 CFLAGS = -std=c11 -Werror -Wextra -Wall -Wimplicit -Wstrict-aliasing \
 		 -Iinclude
-CFLAGS += -g
+CFLAGS += -g -O3
 CFLAGS += $(shell pkg-config --cflags sdl2)
 
 LDFLAGS = -Llib
-LDFLAGS += -g
+LDFLAGS += -g -flto -O3
 
 LIBSRCS = $(call rwildcard,src/libgoodboy,*.c)
 LIBOBJS = $(LIBSRCS:.c=.o)

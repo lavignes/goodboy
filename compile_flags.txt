@@ -5,4 +5,3 @@
 -Wimplicit
 -Wstrict-aliasing
 -Iinclude
-
