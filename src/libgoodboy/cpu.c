@@ -8,45 +8,42 @@
 STATIC_ASSERT(offsetof(Reg, l) == 0, "Reg.l offset must be 0");
 STATIC_ASSERT(offsetof(Reg, h) == 1, "Reg.h offset must be 1");
 
-void cpuReset(Cpu *cpu, Bus *bus) {
-    (void)bus;
-    memset(cpu, 0, sizeof(Cpu));
-}
+void cpuReset(Cpu* cpu) { memset(cpu, 0, sizeof(Cpu)); }
 
-static inline UInt push(Cpu *cpu, Bus *bus, U16 val) {
+static INLINE UInt push(Cpu* cpu, Bus* bus, U16 val) {
     busWrite(bus, --cpu->sp, val >> 8);
     busWrite(bus, --cpu->sp, val);
     return 16;
 }
 
-static inline U8 fetch(Cpu *cpu, Bus *bus) {
+static INLINE U8 fetch(Cpu* cpu, Bus* bus) {
     U8 byte = busRead(bus, cpu->pc++);
     return byte;
 }
 
-static inline U16 rst(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE U16 rst(Cpu* cpu, Bus* bus, U16 addr) {
     push(cpu, bus, cpu->pc);
     cpu->pc = addr;
     return 16;
 }
 
-static inline UInt loadImm16(Cpu *cpu, Bus *bus, Reg *reg) {
+static INLINE UInt loadImm16(Cpu* cpu, Bus* bus, Reg* reg) {
     reg->l = fetch(cpu, bus);
     reg->h = fetch(cpu, bus);
     return 12;
 }
 
-static inline UInt storeIndirect(Bus *bus, U16 addr, U8 val) {
+static INLINE UInt storeIndirect(Bus* bus, U16 addr, U8 val) {
     busWrite(bus, addr, val);
     return 8;
 }
 
-static inline UInt inc16(Reg *reg) {
+static INLINE UInt inc16(Reg* reg) {
     ++reg->hl;
     return 8;
 }
 
-static inline UInt inc(Cpu *cpu, U8 *reg) {
+static INLINE UInt inc(Cpu* cpu, U8* reg) {
     U8 val = *reg;
     U8 res = val + 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H);
@@ -56,7 +53,7 @@ static inline UInt inc(Cpu *cpu, U8 *reg) {
     return 4;
 }
 
-static inline UInt dec(Cpu *cpu, U8 *reg) {
+static INLINE UInt dec(Cpu* cpu, U8* reg) {
     U8 val = *reg;
     U8 res = val - 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H);
@@ -67,12 +64,12 @@ static inline UInt dec(Cpu *cpu, U8 *reg) {
     return 4;
 }
 
-static inline UInt loadImm8(Cpu *cpu, Bus *bus, U8 *reg) {
+static INLINE UInt loadImm8(Cpu* cpu, Bus* bus, U8* reg) {
     *reg = fetch(cpu, bus);
     return 8;
 }
 
-static inline U8 rlcVal(Cpu *cpu, U8 val) {
+static INLINE U8 rlcVal(Cpu* cpu, U8 val) {
     U8 carry = (val & 0x80) >> 7;
     U8 res   = (val << 1) | carry;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -81,26 +78,26 @@ static inline U8 rlcVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt rlca(Cpu *cpu) {
+static INLINE UInt rlca(Cpu* cpu) {
     cpu->af.h = rlcVal(cpu, cpu->af.h);
     cpu->af.l &= ~FLAG_Z;
     return 4;
 }
 
-static inline U16 fetch16(Cpu *cpu, Bus *bus) {
+static INLINE U16 fetch16(Cpu* cpu, Bus* bus) {
     U16 val = (U16)fetch(cpu, bus);
     val |= ((U16)fetch(cpu, bus)) << 8;
     return val;
 }
 
-static inline UInt storeStack(Cpu *cpu, Bus *bus) {
+static INLINE UInt storeStack(Cpu* cpu, Bus* bus) {
     U16 addr = fetch16(cpu, bus);
     busWrite(bus, addr, cpu->sp);
     busWrite(bus, addr + 1, cpu->sp >> 8);
     return 20;
 }
 
-static inline UInt add16(Cpu *cpu, U16 val) {
+static INLINE UInt add16(Cpu* cpu, U16 val) {
     U16 hl  = cpu->hl.hl;
     U32 res = (U32)hl + (U32)val;
     cpu->af.l &= ~(FLAG_N | FLAG_H | FLAG_C);
@@ -110,17 +107,17 @@ static inline UInt add16(Cpu *cpu, U16 val) {
     return 8;
 }
 
-static inline UInt loadIndirect(Bus *bus, U8 *dst, U16 addr) {
+static INLINE UInt loadIndirect(Bus* bus, U8* dst, U16 addr) {
     *dst = busRead(bus, addr);
     return 8;
 }
 
-static inline UInt dec16(Reg *reg) {
+static INLINE UInt dec16(Reg* reg) {
     --reg->hl;
     return 8;
 }
 
-static inline U8 rrcVal(Cpu *cpu, U8 val) {
+static INLINE U8 rrcVal(Cpu* cpu, U8 val) {
     U8 carry = val & 0x01;
     U8 res   = (val >> 1) | (carry << 7);
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -129,19 +126,19 @@ static inline U8 rrcVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt rrca(Cpu *cpu) {
+static INLINE UInt rrca(Cpu* cpu) {
     cpu->af.h = rrcVal(cpu, cpu->af.h);
     cpu->af.l &= ~FLAG_Z;
     return 4;
 }
 
-static inline UInt stop(Cpu *cpu, Bus *bus) {
+static INLINE UInt stop(Cpu* cpu, Bus* bus) {
     cpu->stopped = true;
     fetch(cpu, bus);
     return 4;
 }
 
-static inline U8 rlVal(Cpu *cpu, U8 val) {
+static INLINE U8 rlVal(Cpu* cpu, U8 val) {
     U8 carry = (cpu->af.l & FLAG_C) ? 1 : 0;
     U8 res   = (val << 1) | carry;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -150,19 +147,19 @@ static inline U8 rlVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt rla(Cpu *cpu) {
+static INLINE UInt rla(Cpu* cpu) {
     cpu->af.h = rlVal(cpu, cpu->af.h);
     cpu->af.l &= ~FLAG_Z;
     return 4;
 }
 
-static inline UInt jr(Cpu *cpu, Bus *bus) {
+static INLINE UInt jr(Cpu* cpu, Bus* bus) {
     I8 offset = (I8)fetch(cpu, bus);
     cpu->pc += (I16)offset;
     return 12;
 }
 
-static inline U8 rrVal(Cpu *cpu, U8 val) {
+static INLINE U8 rrVal(Cpu* cpu, U8 val) {
     U8 carry = (cpu->af.l & FLAG_C) ? 0x80 : 0;
     U8 res   = (val >> 1) | carry;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -171,13 +168,13 @@ static inline U8 rrVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt rra(Cpu *cpu) {
+static INLINE UInt rra(Cpu* cpu) {
     cpu->af.h = rrVal(cpu, cpu->af.h);
     cpu->af.l &= ~FLAG_Z;
     return 4;
 }
 
-static inline UInt jrCondition(Cpu *cpu, Bus *bus, Bool condition) {
+static INLINE UInt jrCondition(Cpu* cpu, Bus* bus, Bool condition) {
     I8 offset = (I8)fetch(cpu, bus);
     if (condition) {
         cpu->pc += (I16)offset;
@@ -186,7 +183,7 @@ static inline UInt jrCondition(Cpu *cpu, Bus *bus, Bool condition) {
     return 8;
 }
 
-static inline UInt daa(Cpu *cpu) {
+static INLINE UInt daa(Cpu* cpu) {
     U8 a = cpu->af.h;
     U8 f = cpu->af.l;
     if (f & FLAG_N) {
@@ -212,18 +209,18 @@ static inline UInt daa(Cpu *cpu) {
     return 4;
 }
 
-static inline UInt cpl(Cpu *cpu) {
+static INLINE UInt cpl(Cpu* cpu) {
     cpu->af.h = ~cpu->af.h;
     cpu->af.l |= FLAG_N | FLAG_H;
     return 4;
 }
 
-static inline UInt loadSp(Cpu *cpu, Bus *bus) {
+static INLINE UInt loadSp(Cpu* cpu, Bus* bus) {
     cpu->sp = fetch16(cpu, bus);
     return 12;
 }
 
-static inline UInt incIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt incIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     U8 res = val + 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H);
@@ -233,7 +230,7 @@ static inline UInt incIndirect(Cpu *cpu, Bus *bus, U16 addr) {
     return 12;
 }
 
-static inline UInt decIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt decIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     U8 res = val - 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H);
@@ -244,35 +241,35 @@ static inline UInt decIndirect(Cpu *cpu, Bus *bus, U16 addr) {
     return 12;
 }
 
-static inline UInt storeIndirectImm8(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt storeIndirectImm8(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = fetch(cpu, bus);
     busWrite(bus, addr, val);
     return 12;
 }
 
-static inline UInt scf(Cpu *cpu) {
+static INLINE UInt scf(Cpu* cpu) {
     cpu->af.l &= ~(FLAG_N | FLAG_H);
     cpu->af.l |= FLAG_C;
     return 4;
 }
 
-static inline UInt ccf(Cpu *cpu) {
+static INLINE UInt ccf(Cpu* cpu) {
     cpu->af.l &= ~(FLAG_N | FLAG_H);
     cpu->af.l ^= FLAG_C;
     return 4;
 }
 
-static inline UInt copy(U8 *dst, U8 *src) {
+static INLINE UInt copy(U8* dst, U8* src) {
     *dst = *src;
     return 4;
 }
 
-static inline UInt halt(Cpu *cpu) {
+static INLINE UInt halt(Cpu* cpu) {
     cpu->halted = true;
     return 4;
 }
 
-static inline U8 addVal(Cpu *cpu, U8 val, U8 carry) {
+static INLINE U8 addVal(Cpu* cpu, U8 val, U8 carry) {
     U16 res = (U16)cpu->af.h + (U16)val + (U16)carry;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= ((U8)res == 0) ? FLAG_Z : 0;
@@ -281,31 +278,31 @@ static inline U8 addVal(Cpu *cpu, U8 val, U8 carry) {
     return (U8)res;
 }
 
-static inline UInt add(Cpu *cpu, U8 val) {
+static INLINE UInt add(Cpu* cpu, U8 val) {
     cpu->af.h = addVal(cpu, val, 0);
     return 4;
 }
 
-static inline UInt addIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt addIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     cpu->af.h = addVal(cpu, val, 0);
     return 8;
 }
 
-static inline UInt adc(Cpu *cpu, U8 val) {
+static INLINE UInt adc(Cpu* cpu, U8 val) {
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = addVal(cpu, val, carry);
     return 4;
 }
 
-static inline UInt adcIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt adcIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = addVal(cpu, val, carry);
     return 8;
 }
 
-static inline U8 subVal(Cpu *cpu, U8 val, U8 carry) {
+static INLINE U8 subVal(Cpu* cpu, U8 val, U8 carry) {
     U16 res = (U16)cpu->af.h - (U16)val - (U16)carry;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= ((U8)res == 0) ? FLAG_Z : 0;
@@ -315,31 +312,31 @@ static inline U8 subVal(Cpu *cpu, U8 val, U8 carry) {
     return (U8)res;
 }
 
-static inline UInt sub(Cpu *cpu, U8 val) {
+static INLINE UInt sub(Cpu* cpu, U8 val) {
     cpu->af.h = subVal(cpu, val, 0);
     return 4;
 }
 
-static inline UInt subIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt subIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     cpu->af.h = subVal(cpu, val, 0);
     return 8;
 }
 
-static inline UInt sbc(Cpu *cpu, U8 val) {
+static INLINE UInt sbc(Cpu* cpu, U8 val) {
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = subVal(cpu, val, carry);
     return 4;
 }
 
-static inline UInt sbcIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt sbcIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = subVal(cpu, val, carry);
     return 8;
 }
 
-static inline UInt andVal(Cpu *cpu, U8 val) {
+static INLINE UInt andVal(Cpu* cpu, U8 val) {
     U8 res = cpu->af.h & val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
@@ -347,54 +344,54 @@ static inline UInt andVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt and_(Cpu *cpu, U8 val) {
+static INLINE UInt and_(Cpu* cpu, U8 val) {
     cpu->af.h = andVal(cpu, val);
     return 4;
 }
 
-static inline UInt andIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt andIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     cpu->af.h = andVal(cpu, val);
     return 8;
 }
 
-static inline U8 xorVal(Cpu *cpu, U8 val) {
+static INLINE U8 xorVal(Cpu* cpu, U8 val) {
     U8 res = cpu->af.h ^ val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
     return res;
 }
 
-static inline UInt xor_(Cpu *cpu, U8 val) {
+static INLINE UInt xor_(Cpu* cpu, U8 val) {
     cpu->af.h = xorVal(cpu, val);
     return 4;
 }
 
-static inline UInt xorIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt xorIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     cpu->af.h = xorVal(cpu, val);
     return 8;
 }
 
-static inline UInt orVal(Cpu *cpu, U8 val) {
+static INLINE UInt orVal(Cpu* cpu, U8 val) {
     U8 res = cpu->af.h | val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
     return res;
 }
 
-static inline UInt or_(Cpu *cpu, U8 val) {
+static INLINE UInt or_(Cpu* cpu, U8 val) {
     cpu->af.h = orVal(cpu, val);
     return 4;
 }
 
-static inline UInt orIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt orIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val    = busRead(bus, addr);
     cpu->af.h = orVal(cpu, val);
     return 8;
 }
 
-static inline void cpVal(Cpu *cpu, U8 val) {
+static INLINE void cpVal(Cpu* cpu, U8 val) {
     U16 res = (U16)cpu->af.h - (U16)val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= ((U8)res == 0) ? FLAG_Z : 0;
@@ -403,43 +400,43 @@ static inline void cpVal(Cpu *cpu, U8 val) {
     cpu->af.l |= (res > 0xFF) ? FLAG_C : 0;
 }
 
-static inline UInt cp(Cpu *cpu, U8 val) {
+static INLINE UInt cp(Cpu* cpu, U8 val) {
     cpVal(cpu, val);
     return 4;
 }
 
-static inline UInt cpIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt cpIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     cpVal(cpu, val);
     return 8;
 }
 
-static inline UInt ret(Cpu *cpu, Bus *bus) {
+static INLINE UInt ret(Cpu* cpu, Bus* bus) {
     U8 lo   = busRead(bus, cpu->sp++);
     U8 hi   = busRead(bus, cpu->sp++);
     cpu->pc = (((U16)hi) << 8) | (U16)lo;
     return 16;
 }
 
-static inline UInt retCondition(Cpu *cpu, Bus *bus, Bool condition) {
+static INLINE UInt retCondition(Cpu* cpu, Bus* bus, Bool condition) {
     if (condition) {
         return 4 + ret(cpu, bus);
     }
     return 8;
 }
 
-static inline UInt pop(Cpu *cpu, Bus *bus, Reg *reg) {
+static INLINE UInt pop(Cpu* cpu, Bus* bus, Reg* reg) {
     reg->l = busRead(bus, cpu->sp++);
     reg->h = busRead(bus, cpu->sp++);
     return 12;
 }
 
-static inline UInt jmp(Cpu *cpu, Bus *bus) {
+static INLINE UInt jmp(Cpu* cpu, Bus* bus) {
     cpu->pc = fetch16(cpu, bus);
     return 16;
 }
 
-static inline UInt jmpCondition(Cpu *cpu, Bus *bus, Bool condition) {
+static INLINE UInt jmpCondition(Cpu* cpu, Bus* bus, Bool condition) {
     U16 addr = fetch16(cpu, bus);
     if (condition) {
         cpu->pc = addr;
@@ -448,14 +445,14 @@ static inline UInt jmpCondition(Cpu *cpu, Bus *bus, Bool condition) {
     return 12;
 }
 
-static inline UInt call(Cpu *cpu, Bus *bus) {
+static INLINE UInt call(Cpu* cpu, Bus* bus) {
     U16 addr = fetch16(cpu, bus);
     push(cpu, bus, cpu->pc);
     cpu->pc = addr;
     return 24;
 }
 
-static inline UInt callCondition(Cpu *cpu, Bus *bus, Bool condition) {
+static INLINE UInt callCondition(Cpu* cpu, Bus* bus, Bool condition) {
     U16 addr = fetch16(cpu, bus);
     if (condition) {
         push(cpu, bus, cpu->pc);
@@ -465,49 +462,49 @@ static inline UInt callCondition(Cpu *cpu, Bus *bus, Bool condition) {
     return 12;
 }
 
-static inline UInt adcImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt adcImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = addVal(cpu, val, carry);
     return 8;
 }
 
-static inline UInt subImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt subImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     cpu->af.h = subVal(cpu, val, 0);
     return 8;
 }
 
-static inline UInt reti(Cpu *cpu, Bus *bus) {
+static INLINE UInt reti(Cpu* cpu, Bus* bus) {
     cpu->ime = true;
     return ret(cpu, bus);
 }
 
-static inline UInt sbcImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt sbcImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     U8 carry  = (cpu->af.l & FLAG_C) ? 1 : 0;
     cpu->af.h = subVal(cpu, val, carry);
     return 8;
 }
 
-static inline UInt storeIndirectHighImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt storeIndirectHighImm8(Cpu* cpu, Bus* bus) {
     U16 offset = (U16)fetch(cpu, bus);
     busWrite(bus, 0xFF00 | offset, cpu->af.h);
     return 12;
 }
 
-static inline UInt storeIndirectHighC(Cpu *cpu, Bus *bus) {
+static INLINE UInt storeIndirectHighC(Cpu* cpu, Bus* bus) {
     busWrite(bus, 0xFF00 | (U16)cpu->bc.l, cpu->af.h);
     return 8;
 }
 
-static inline UInt andImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt andImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     cpu->af.h = andVal(cpu, val);
     return 8;
 }
 
-static inline UInt addSpImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt addSpImm8(Cpu* cpu, Bus* bus) {
     I8  offset = (I8)fetch(cpu, bus);
     U16 sp     = cpu->sp;
     U32 res    = (U32)((I32)sp + (I32)offset);
@@ -521,40 +518,40 @@ static inline UInt addSpImm8(Cpu *cpu, Bus *bus) {
     return 16;
 }
 
-static inline UInt jmpHl(Cpu *cpu) {
+static INLINE UInt jmpHl(Cpu* cpu) {
     cpu->pc = cpu->hl.hl;
     return 4;
 }
 
-static inline UInt xorImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt xorImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     cpu->af.h = xorVal(cpu, val);
     return 8;
 }
 
-static inline UInt loadIndirectHighImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt loadIndirectHighImm8(Cpu* cpu, Bus* bus) {
     U16 offset = (U16)fetch(cpu, bus);
     cpu->af.h  = busRead(bus, 0xFF00 | offset);
     return 12;
 }
 
-static inline UInt loadIndirectHighC(Cpu *cpu, Bus *bus) {
+static INLINE UInt loadIndirectHighC(Cpu* cpu, Bus* bus) {
     cpu->af.h = busRead(bus, 0xFF00 | (U16)cpu->bc.l);
     return 8;
 }
 
-static inline UInt di(Cpu *cpu) {
+static INLINE UInt di(Cpu* cpu) {
     cpu->ime = false;
     return 4;
 }
 
-static inline UInt orImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt orImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     cpu->af.h = orVal(cpu, val);
     return 8;
 }
 
-static inline UInt loadSpImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt loadSpImm8(Cpu* cpu, Bus* bus) {
     I8  offset = (I8)fetch(cpu, bus);
     U16 sp     = cpu->sp;
     U32 res    = (U32)((I32)sp + (I32)offset);
@@ -568,77 +565,77 @@ static inline UInt loadSpImm8(Cpu *cpu, Bus *bus) {
     return 12;
 }
 
-static inline UInt loadSpHl(Cpu *cpu) {
+static INLINE UInt loadSpHl(Cpu* cpu) {
     cpu->sp = cpu->hl.hl;
     return 8;
 }
 
-static inline UInt loadIndirectImm16(Cpu *cpu, Bus *bus) {
+static INLINE UInt loadIndirectImm16(Cpu* cpu, Bus* bus) {
     U16 addr  = fetch16(cpu, bus);
     cpu->af.h = busRead(bus, addr);
     return 16;
 }
 
-static inline UInt ei(Cpu *cpu) {
+static INLINE UInt ei(Cpu* cpu) {
     cpu->ime = true;
     return 4;
 }
 
-static inline UInt cpImm8(Cpu *cpu, Bus *bus) {
+static INLINE UInt cpImm8(Cpu* cpu, Bus* bus) {
     U8 val = fetch(cpu, bus);
     cpVal(cpu, val);
     return 8;
 }
 
-static inline UInt rlc(Cpu *cpu, U8 *reg) {
+static INLINE UInt rlc(Cpu* cpu, U8* reg) {
     *reg = rlcVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt rlcIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt rlcIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = rlcVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt rrc(Cpu *cpu, U8 *reg) {
+static INLINE UInt rrc(Cpu* cpu, U8* reg) {
     *reg = rrcVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt rrcIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt rrcIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = rrcVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt rl(Cpu *cpu, U8 *reg) {
+static INLINE UInt rl(Cpu* cpu, U8* reg) {
     *reg = rlVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt rlIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt rlIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = rlVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt rr(Cpu *cpu, U8 *reg) {
+static INLINE UInt rr(Cpu* cpu, U8* reg) {
     *reg = rrVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt rrIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt rrIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = rrVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt slaVal(Cpu *cpu, U8 val) {
+static INLINE UInt slaVal(Cpu* cpu, U8 val) {
     U8 carry = (val & 0x80) >> 7;
     U8 res   = val << 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -647,19 +644,19 @@ static inline UInt slaVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt sla(Cpu *cpu, U8 *reg) {
+static INLINE UInt sla(Cpu* cpu, U8* reg) {
     *reg = slaVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt slaIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt slaIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = slaVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt sraVal(Cpu *cpu, U8 val) {
+static INLINE UInt sraVal(Cpu* cpu, U8 val) {
     U8 carry = val & 0x01;
     U8 res   = ((I8)val) >> 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -668,38 +665,38 @@ static inline UInt sraVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt sra(Cpu *cpu, U8 *reg) {
+static INLINE UInt sra(Cpu* cpu, U8* reg) {
     *reg = sraVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt sraIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt sraIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = sraVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt swapVal(Cpu *cpu, U8 val) {
+static INLINE UInt swapVal(Cpu* cpu, U8 val) {
     U8 res = (val << 4) | (val >> 4);
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
     return res;
 }
 
-static inline UInt swap(Cpu *cpu, U8 *reg) {
+static INLINE UInt swap(Cpu* cpu, U8* reg) {
     *reg = swapVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt swapIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt swapIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = swapVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline UInt srlVal(Cpu *cpu, U8 val) {
+static INLINE UInt srlVal(Cpu* cpu, U8 val) {
     U8 carry = val & 0x01;
     U8 res   = val >> 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -708,91 +705,90 @@ static inline UInt srlVal(Cpu *cpu, U8 val) {
     return res;
 }
 
-static inline UInt srl(Cpu *cpu, U8 *reg) {
+static INLINE UInt srl(Cpu* cpu, U8* reg) {
     *reg = srlVal(cpu, *reg);
     return 8;
 }
 
-static inline UInt srlIndirect(Cpu *cpu, Bus *bus, U16 addr) {
+static INLINE UInt srlIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     U8 val = busRead(bus, addr);
     val    = srlVal(cpu, val);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline void bitVal(Cpu *cpu, U8 val, U8 bit) {
+static INLINE void bitVal(Cpu* cpu, U8 val, U8 bit) {
     cpu->af.l &= ~(FLAG_Z | FLAG_N);
     cpu->af.l |= ((val & (1 << bit)) == 0) ? FLAG_Z : 0;
     cpu->af.l |= FLAG_H;
 }
 
-static inline UInt bit(Cpu *cpu, U8 *reg, U8 bit) {
+static INLINE UInt bit(Cpu* cpu, U8* reg, U8 bit) {
     bitVal(cpu, *reg, bit);
     return 8;
 }
 
-static inline UInt bitIndirect(Cpu *cpu, Bus *bus, U16 addr, U8 bit) {
+static INLINE UInt bitIndirect(Cpu* cpu, Bus* bus, U16 addr, U8 bit) {
     U8 val = busRead(bus, addr);
     bitVal(cpu, val, bit);
     return 16;
 }
 
-static inline U8 resVal(U8 val, U8 bit) { return val & ~(1 << bit); }
+static INLINE U8 resVal(U8 val, U8 bit) { return val & ~(1 << bit); }
 
-static inline UInt res(U8 *reg, U8 bit) {
+static INLINE UInt res(U8* reg, U8 bit) {
     *reg = resVal(*reg, bit);
     return 8;
 }
 
-static inline UInt resIndirect(Bus *bus, U16 addr, U8 bit) {
+static INLINE UInt resIndirect(Bus* bus, U16 addr, U8 bit) {
     U8 val = busRead(bus, addr);
     val    = resVal(val, bit);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static inline U8 setVal(U8 val, U8 bit) { return val | (1 << bit); }
+static INLINE U8 setVal(U8 val, U8 bit) { return val | (1 << bit); }
 
-static inline UInt set(U8 *reg, U8 bit) {
+static INLINE UInt set(U8* reg, U8 bit) {
     *reg = setVal(*reg, bit);
     return 8;
 }
 
-static inline UInt setIndirect(Bus *bus, U16 addr, U8 bit) {
+static INLINE UInt setIndirect(Bus* bus, U16 addr, U8 bit) {
     U8 val = busRead(bus, addr);
     val    = setVal(val, bit);
     busWrite(bus, addr, val);
     return 16;
 }
 
-static UInt cbPrefix(Cpu *cpu, Bus *bus);
+static UInt cbPrefix(Cpu* cpu, Bus* bus);
 
-UInt cpuTick(Cpu *cpu, Bus *bus) {
-    U8 iflags = busRead(bus, PORT_IF);
-    U8 imask  = busRead(bus, PORT_IE) & iflags;
+UInt cpuTick(Cpu* cpu, Bus* bus) {
+    U8 imask = bus->ieflags & bus->iflags;
     if (cpu->halted) {
         if (imask == 0) {
             return 4;
-            cpu->halted = false;
         }
+        cpu->halted = false;
     }
     if (cpu->ime) {
         if (imask != 0) {
             if (imask & IFLAG_VBLANK) {
                 rst(cpu, bus, 0x0040);
-                busWrite(bus, PORT_IF, iflags ^ IFLAG_VBLANK);
+                bus->iflags ^= IFLAG_VBLANK;
             } else if (imask & IFLAG_LCDSTAT) {
                 rst(cpu, bus, 0x0048);
-                busWrite(bus, PORT_IF, iflags ^ IFLAG_LCDSTAT);
+                bus->iflags ^= IFLAG_LCDSTAT;
             } else if (imask & IFLAG_TIMER) {
                 rst(cpu, bus, 0x0050);
-                busWrite(bus, PORT_IF, iflags ^ IFLAG_TIMER);
+                bus->iflags ^= IFLAG_TIMER;
             } else if (imask & IFLAG_SERIAL) {
                 rst(cpu, bus, 0x0058);
-                busWrite(bus, PORT_IF, iflags ^ IFLAG_SERIAL);
+                bus->iflags ^= IFLAG_SERIAL;
             } else if (imask & IFLAG_JOYPAD) {
                 rst(cpu, bus, 0x0060);
-                busWrite(bus, PORT_IF, iflags ^ IFLAG_JOYPAD);
+                bus->iflags ^= IFLAG_JOYPAD;
             }
             cpu->ime = false;
             return 20;
@@ -905,7 +901,7 @@ UInt cpuTick(Cpu *cpu, Bus *bus) {
     case 0x32:
         return storeIndirect(bus, cpu->hl.hl--, cpu->af.h);
     case 0x33:
-        return inc16((Reg *)&cpu->sp);
+        return inc16((Reg*)&cpu->sp);
     case 0x34:
         return incIndirect(cpu, bus, cpu->hl.hl);
     case 0x35:
@@ -921,7 +917,7 @@ UInt cpuTick(Cpu *cpu, Bus *bus) {
     case 0x3A:
         return loadIndirect(bus, &cpu->af.h, cpu->hl.hl--);
     case 0x3B:
-        return dec16((Reg *)&cpu->sp);
+        return dec16((Reg*)&cpu->sp);
     case 0x3C:
         return inc(cpu, &cpu->af.h);
     case 0x3D:
@@ -1297,7 +1293,7 @@ UInt cpuTick(Cpu *cpu, Bus *bus) {
     case 0xF0:
         return loadIndirectHighImm8(cpu, bus);
     case 0xF1:
-        return pop(cpu, bus, (Reg *)&cpu->af);
+        return pop(cpu, bus, (Reg*)&cpu->af);
     case 0xF2:
         return loadIndirectHighC(cpu, bus);
     case 0xF3:
@@ -1327,9 +1323,10 @@ UInt cpuTick(Cpu *cpu, Bus *bus) {
     case 0xFF:
         return rst(cpu, bus, 0x0038);
     }
+    UNREACHABLE();
 }
 
-static UInt cbPrefix(Cpu *cpu, Bus *bus) {
+static UInt cbPrefix(Cpu* cpu, Bus* bus) {
     switch (fetch(cpu, bus)) {
     case 0x00:
         return rlc(cpu, &cpu->bc.h);
@@ -1859,4 +1856,5 @@ static UInt cbPrefix(Cpu *cpu, Bus *bus) {
     case 0xFF:
         return set(&cpu->af.h, 7);
     }
+    UNREACHABLE();
 }

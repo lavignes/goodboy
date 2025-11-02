@@ -34,7 +34,7 @@ struct Cpu {
     Bool halted;
 };
 
-void cpuReset(Cpu *cpu, Bus *bus);
-UInt cpuTick(Cpu *cpu, Bus *bus);
+void cpuReset(Cpu* cpu);
+UInt cpuTick(Cpu* cpu, Bus* bus);
 
 #endif // GB_CPU_H
