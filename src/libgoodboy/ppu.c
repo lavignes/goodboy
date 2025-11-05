@@ -3,41 +3,67 @@
 #include <string.h>
 
 enum {
-    MODE2_DOT   = 0,
-    MODE3_DOT   = MODE2_DOT + 80,
-    MODE0_DOT   = MODE3_DOT + 172,
-    DOTS_COUNT  = 456,
-    MODE1_LINES = 10,
+    MODE2_START   = 0,
+    MODE3_START   = MODE2_START + 80,
+    MODE0_START   = MODE3_START + 172,
+
+    DOTS_PER_LINE = 456,
+    MODE1_LINES   = 10,
+};
+
+enum {
+    TILE_WIDTH  = 8,
+    TILE_HEIGHT = 8,
+    TILE_STRIDE = 32,
 };
 
 void ppuReset(Ppu* ppu) { memset(ppu, 0, sizeof(Ppu)); }
 
+static INLINE U32 bgColor(Ppu* ppu, U8 bits) {
+    U8 shade = (ppu->bgp >> (bits * 2)) & 0x03;
+    switch (shade) {
+    case 0:
+        return 0xFFFFFFFF;
+    case 1:
+        return 0xAAAAAAFF;
+    case 2:
+        return 0x555555FF;
+    case 3:
+        return 0x000000FF;
+    default:
+        UNREACHABLE();
+    }
+}
+
 static INLINE void drawLine(Ppu* ppu) {
     U32* line  = ppu->pixels[ppu->ly];
     U8*  zline = ppu->zbuf[ppu->ly];
-    memset(zline, 0, sizeof(ppu->zbuf[0]));
-    U16       bgaddr   = (ppu->lcdc & LCDC_BG_MAP)
-                             ? (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR)
-                             : (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR);
-    U8 const* chridxs  = &ppu->vram[0][bgaddr];
-    U8 const* chrattrs = &ppu->vram[1][bgaddr];
-    UInt      y        = (((UInt)ppu->ly) + ((UInt)ppu->scy)) % 256;
-    UInt      chryoff =
-        2 * (y % 8); // Pixel y-offset into tile data (2 bytes per pixel)
-    for (UInt dot = 0; dot < SCREEN_WIDTH; ++dot) {
-        UInt x       = (((UInt)dot) + ((UInt)ppu->scx)) % 256;
-        UInt bgidx   = (x / 8) + ((y / 8) * 32);
-        U8   chridx  = chridxs[bgidx];
-        U8   chrattr = chrattrs[bgidx];
-        UInt chroff  = (ppu->lcdc & LCDC_TILES)
-                           ? (chridx * 16)
-                           : ((UInt)(0x1000 + (((Int)((I8)chridx)) * 16)));
-        UInt chrx    = x % 8;
-        U8   lo      = ppu->vram[0][chroff + chryoff];
-        U8   hi      = ppu->vram[0][chroff + chryoff + 1];
-        U8   bitlo   = (lo & (0x80 >> chrx)) != 0;
-        U8   bithi   = (hi & (0x80 >> chrx)) != 0;
-        U8   bits    = (bithi << 1) | bitlo;
+    memset(zline, 0, sizeof(*ppu->zbuf));
+    U16       mapaddr = (ppu->lcdc & LCDC_BG_MAP)
+                            ? (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR)
+                            : (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR);
+    U8 const* idxs    = &ppu->vram[0][mapaddr];
+    // U8 const* attrs   = &ppu->vram[1][mapaddr];
+    U16       y       = (((U16)ppu->ly) + ((U16)ppu->scy)) % 256;
+    // Pixel y-offset into tile data (2 bytes per pixel)
+    U16       tiley   = 2 * (y % TILE_HEIGHT);
+    for (U16 dot = 0; dot < SCREEN_WIDTH; ++dot) {
+        U16 x       = (((U16)dot) + ((U16)ppu->scx)) % 256;
+        U16 mapidx  = (x / TILE_WIDTH) + ((y / TILE_HEIGHT) * 32);
+        U8  idx     = idxs[mapidx];
+        // U8   attr   = attrs[mapidx];
+        U16 tileoff = (ppu->lcdc & LCDC_TILES)
+                          ? (((U16)idx) * 16)
+                          : ((U16)(0x1000 + (((U16)((I8)idx)) * 16)));
+        U16 tilex   = x % TILE_WIDTH;
+        // TODO: index into U16 view of VRAM instead? if so,^ don't multiply
+        // yoff by 2 and idx by 16.. it would be by 8 then.
+        U8  lo      = ppu->vram[0][tileoff + tiley];
+        U8  hi      = ppu->vram[0][tileoff + tiley + 1];
+        U8  bitlo   = (lo & (0x80 >> tilex)) != 0;
+        U8  bithi   = (hi & (0x80 >> tilex)) != 0;
+        U8  bits    = (bithi << 1) | bitlo;
+        line[dot]   = bgColor(ppu, bits);
     }
 }
 
@@ -64,18 +90,19 @@ Bool ppuTick(Ppu* ppu, Bus* bus) {
             }
         }
     }
+    // before vblank
     if (ppu->ly < SCREEN_HEIGHT) {
-        if (ppu->dot == MODE2_DOT) {
+        if (ppu->dot == MODE2_START) {
             // oam scan start (mode 2)
             ppu->stat = (ppu->stat & ~STAT_MODE_MASK) | 0x02;
             if (ppu->stat & STAT_MODE2_INT) {
                 bus->iflags |= IFLAG_LCDSTAT;
             }
-        } else if (ppu->dot == MODE3_DOT) {
+        } else if (ppu->dot == MODE3_START) {
             // drawing start (mode 3)
             ppu->stat = (ppu->stat & ~STAT_MODE_MASK) | 0x03;
             drawLine(ppu);
-        } else if (ppu->dot == MODE0_DOT) {
+        } else if (ppu->dot == MODE0_START) {
             // hblank (mode 0)
             ppu->stat = (ppu->stat & ~STAT_MODE_MASK) | 0x00;
             if (ppu->stat & STAT_MODE0_INT) {
@@ -83,14 +110,14 @@ Bool ppuTick(Ppu* ppu, Bus* bus) {
             }
         }
         ++ppu->dot;
-        if (ppu->dot == DOTS_COUNT) {
+        if (ppu->dot == DOTS_PER_LINE) {
             ppu->dot = 0;
             ++ppu->ly;
         }
         return false;
     }
     ++ppu->dot;
-    if (ppu->dot == DOTS_COUNT) {
+    if (ppu->dot == DOTS_PER_LINE) {
         ppu->dot = 0;
         ++ppu->ly;
         if (ppu->ly == (SCREEN_HEIGHT + MODE1_LINES)) {

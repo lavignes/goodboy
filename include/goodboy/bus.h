@@ -5,6 +5,8 @@
 #include <goodboy/fatal.h>
 #include <goodboy/ppu.h>
 
+#include <stdio.h>
+
 enum {
     IFLAG_VBLANK  = 1 << 0,
     IFLAG_LCDSTAT = 1 << 1,
@@ -110,6 +112,10 @@ enum {
     ECHO_BANKX_SIZE       = 0x0E00,
     ECHO_BANKX_START_ADDR = 0xF000,
     ECHO_BANKX_END_ADDR   = ECHO_BANKX_START_ADDR + ECHO_BANKX_SIZE - 1,
+
+    HRAM_SIZE             = 0x007F,
+    HRAM_START_ADDR       = 0xFF80,
+    HRAM_END_ADDR         = HRAM_START_ADDR + HRAM_SIZE - 1,
 };
 
 typedef void (*DevResetFn)(void*);
@@ -126,24 +132,29 @@ typedef struct {
 } Dev;
 
 extern Dev const DEV_NULL;
+extern Dev const DEV_BOOT;
 
 struct Bus {
     Cpu cpu;
     Ppu ppu;
     U8  wram[WRAM_BANK_SIZE][8];
+    U8  hram[HRAM_SIZE];
 
     Dev mbc;
+    Dev cart;
     Dev input;
     Dev serial;
 
-    U8 wbk;
     U8 iflags;
+    U8 wbk;
     U8 ieflags;
 };
 
 static inline void busReset(Bus* bus) {
     cpuReset(&bus->cpu);
     ppuReset(&bus->ppu);
+    bus->mbc       = DEV_BOOT;
+    bus->mbc.state = &bus->cart;
     bus->mbc.reset(bus->mbc.state);
     bus->input.reset(bus->input.state);
     bus->serial.reset(bus->serial.state);
@@ -167,7 +178,7 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
     case ROM_BANK0_START_ADDR ... ROM_BANKX_END_ADDR:
         return bus->mbc.read(bus->mbc.state, addr);
     case VRAM_START_ADDR ... VRAM_END_ADDR:
-        return bus->ppu.vram[addr - VRAM_START_ADDR][bus->ppu.vbk];
+        return bus->ppu.vram[bus->ppu.vbk & 1][addr - VRAM_START_ADDR];
     case SRAM_START_ADDR ... SRAM_END_ADDR:
         return bus->mbc.read(bus->mbc.state, addr);
     case WRAM_BANK0_START_ADDR ... WRAM_BANK0_END_ADDR:
@@ -178,7 +189,7 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
         return bus->wram[0][addr - ECHO_BANK0_START_ADDR];
     case ECHO_BANKX_START_ADDR ... ECHO_BANKX_END_ADDR:
         return bus
-            ->wram[(bus->wbk < 2) ? 1 : bus->wbk][addr - ECHO_BANK0_START_ADDR];
+            ->wram[(bus->wbk < 2) ? 1 : bus->wbk][addr - ECHO_BANKX_START_ADDR];
     case OAM_START_ADDR ... OAM_END_ADDR:
         return bus->ppu.objs[addr - OAM_START_ADDR];
     case 0xFEA0 ... 0xFEFF:
@@ -187,6 +198,28 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
         return bus->input.read(bus->input.state, addr);
     case PORT_IF:
         return bus->iflags;
+    case PORT_NR10:
+    case PORT_NR11:
+    case PORT_NR12:
+    case PORT_NR13:
+    case PORT_NR14:
+    case PORT_NR21:
+    case PORT_NR22:
+    case PORT_NR23:
+    case PORT_NR24:
+    case PORT_NR30:
+    case PORT_NR31:
+    case PORT_NR32:
+    case PORT_NR33:
+    case PORT_NR34:
+    case PORT_NR41:
+    case PORT_NR42:
+    case PORT_NR43:
+    case PORT_NR44:
+    case PORT_NR50:
+    case PORT_NR51:
+    case PORT_NR52:
+        return 0xFF;
     case PORT_LCDC:
         return bus->ppu.lcdc;
     case PORT_STAT:
@@ -213,6 +246,8 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
         return bus->ppu.wx;
     case PORT_VBK:
         return bus->ppu.vbk;
+    case PORT_BOOT:
+        return 0xFF;
     case PORT_HDMA1:
     case PORT_HDMA2:
     case PORT_HDMA3:
@@ -223,6 +258,8 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
     case PORT_OCPS:
     case PORT_OCPD:
         TODO();
+    case HRAM_START_ADDR ... HRAM_END_ADDR:
+        return bus->hram[addr - HRAM_START_ADDR];
     case PORT_IE:
         return bus->ieflags;
     default:
@@ -238,7 +275,7 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
         bus->mbc.write(bus->mbc.state, addr, val);
         return;
     case VRAM_START_ADDR ... VRAM_END_ADDR:
-        bus->ppu.vram[addr - VRAM_START_ADDR][bus->ppu.vbk & 1] = val;
+        bus->ppu.vram[bus->ppu.vbk & 1][addr - VRAM_START_ADDR] = val;
         return;
     case SRAM_START_ADDR ... SRAM_END_ADDR:
         bus->mbc.write(bus->mbc.state, addr, val);
@@ -264,8 +301,33 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case PORT_P1:
         bus->input.write(bus->input.state, addr, val);
         return;
+    case PORT_SB:
+        fprintf(stdout, "%02" U8_FMTX, val);
+        return;
     case PORT_IF:
         bus->iflags = val;
+        return;
+    case PORT_NR10:
+    case PORT_NR11:
+    case PORT_NR12:
+    case PORT_NR13:
+    case PORT_NR14:
+    case PORT_NR21:
+    case PORT_NR22:
+    case PORT_NR23:
+    case PORT_NR24:
+    case PORT_NR30:
+    case PORT_NR31:
+    case PORT_NR32:
+    case PORT_NR33:
+    case PORT_NR34:
+    case PORT_NR41:
+    case PORT_NR42:
+    case PORT_NR43:
+    case PORT_NR44:
+    case PORT_NR50:
+    case PORT_NR51:
+    case PORT_NR52:
         return;
     case PORT_LCDC:
         bus->ppu.lcdc = val;
@@ -306,6 +368,9 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case PORT_VBK:
         bus->ppu.vbk = val;
         return;
+    case PORT_BOOT:
+        bus->mbc = bus->cart;
+        return;
     case PORT_HDMA1:
     case PORT_HDMA2:
     case PORT_HDMA3:
@@ -316,6 +381,9 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case PORT_OCPS:
     case PORT_OCPD:
         TODO();
+    case HRAM_START_ADDR ... HRAM_END_ADDR:
+        bus->hram[addr - HRAM_START_ADDR] = val;
+        return;
     case PORT_IE:
         bus->ieflags = val;
         return;

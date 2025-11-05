@@ -7,7 +7,7 @@ typedef struct Bus Bus;
 typedef struct Ppu Ppu;
 
 enum {
-    SCREEN_WIDTH  = 240,
+    SCREEN_WIDTH  = 160,
     SCREEN_HEIGHT = 144,
 };
 
@@ -47,14 +47,14 @@ enum {
 };
 
 struct Ppu {
-    U8 vram[VRAM_SIZE][2];
+    U8 vram[2][VRAM_SIZE];
     U8 objs[OAM_SIZE];
 
     U8  dmacnt;
     U16 dot;
 
-    U32 pixels[SCREEN_WIDTH][SCREEN_HEIGHT];
-    U8  zbuf[SCREEN_WIDTH][SCREEN_HEIGHT];
+    U32 pixels[SCREEN_HEIGHT][SCREEN_WIDTH];
+    U8  zbuf[SCREEN_HEIGHT][SCREEN_WIDTH];
 
     U8 lcdc;
     U8 stat;

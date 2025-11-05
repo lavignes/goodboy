@@ -1,28 +1,16 @@
+#include <goodboy/bus.h>
+
+#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <SDL2/SDL.h>
 
-#include <goodboy/buf.h>
-#include <goodboy/bus.h>
+void mbcReset(U8 rom[]) { (void)rom; }
 
-typedef struct {
-    View rom;
-    View sram;
-} MbcState;
+U8 mbcRead(U8 rom[], U16 addr) { return rom[addr]; }
 
-void mbcReset(MbcState* state) { (void)state; }
-
-U8 mbcRead(MbcState* state, U16 addr) {
-    (void)state;
-    (void)addr;
-    return 0;
-}
-
-void mbcWrite(MbcState* state, U16 addr, U8 val) {
-    (void)state;
-    (void)addr;
-    (void)val;
-}
+void mbcWrite(U8 rom[], U16 addr, U8 val) { rom[addr] = val; }
 
 typedef struct {
     UInt counter;
@@ -41,6 +29,12 @@ void inputTick(InputState* state) {
         if (keys[SDL_SCANCODE_ESCAPE]) {
             state->quit = true;
         }
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                state->quit = true;
+            }
+        }
     }
 }
 
@@ -56,31 +50,53 @@ void inputWrite(InputState* state, U16 addr, U8 val) {
     TODO();
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc;
+    int exitcode = EXIT_FAILURE;
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
-        fprintf(stderr, "Failed to initialize SDL subsystems: %s\n",
+        fprintf(stderr, "Failed to initialize subsystems: %s\n",
                 SDL_GetError());
-        SDL_Quit();
-        return EXIT_FAILURE;
+        goto cleanupSDL;
     }
-    SDL_Window*   win;
-    SDL_Renderer* renderer;
-    if (SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, 0, &win,
-                                    &renderer)) {
+    SDL_Window* win = SDL_CreateWindow(
+        "goodboy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        SCREEN_WIDTH * 4, SCREEN_HEIGHT * 4, SDL_WINDOW_ALLOW_HIGHDPI);
+    if (!win) {
         fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
-        SDL_Quit();
-        return EXIT_FAILURE;
+        goto cleanupSDL;
     }
-
-    MbcState   mbcstate = {0};
-    InputState istate   = {0};
-
+    SDL_Renderer* renderer = SDL_CreateRenderer(
+        win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) {
+        fprintf(stderr, "Failed to create renderer: %s\n", SDL_GetError());
+        goto cleanupWindow;
+    }
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STREAMING,
+                                             SCREEN_WIDTH, SCREEN_HEIGHT);
+    if (!texture) {
+        fprintf(stderr, "Failed to create texture: %s\n", SDL_GetError());
+        goto cleanupRenderer;
+    }
+    U8    rom[0x8000] = {0};
+    FILE* file        = fopen(argv[1], "rb");
+    if (!file) {
+        fprintf(stderr, "Failed to open ROM file: %s\n", strerror(errno));
+        goto cleanupRenderer;
+    }
+    while (fread(rom, 1, 4096, file)) {
+    }
+    int err = ferror(file);
+    if (err) {
+        fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
+        goto cleanupRenderer;
+    }
+    InputState istate = {0};
     ;
-
     Bus bus = {
-        .mbc =
+        .cart =
             {
-                .state = &mbcstate,
+                .state = &rom,
                 .reset = (DevResetFn)mbcReset,
                 .tick  = DEV_NULL.tick,
                 .read  = (DevReadFn)mbcRead,
@@ -96,13 +112,40 @@ int main() {
             },
         .serial = DEV_NULL,
     };
-
     busReset(&bus);
 
+    UInt frames = 0;
+    U64  last   = SDL_GetTicks64();
     while (!istate.quit) {
-        busTick(&bus);
+        if (busTick(&bus)) {
+            void* pixels;
+            int   pitch;
+            SDL_LockTexture(texture, NULL, &pixels, &pitch);
+            memcpy(pixels, bus.ppu.pixels, sizeof(bus.ppu.pixels));
+            SDL_UnlockTexture(texture);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, NULL, NULL);
+            SDL_RenderPresent(renderer);
+            ++frames;
+        }
+        U64 now = SDL_GetTicks64();
+        if ((now - last) >= 1000) {
+            char title[64];
+            snprintf(title, sizeof(title), "goodboy - %" UINT_FMT " fps",
+                     frames);
+            SDL_SetWindowTitle(win, title);
+            frames = 0;
+            last   = now;
+        }
     }
 
+    exitcode = EXIT_SUCCESS;
+    SDL_DestroyTexture(texture);
+cleanupRenderer:
+    SDL_DestroyRenderer(renderer);
+cleanupWindow:
+    SDL_DestroyWindow(win);
+cleanupSDL:
     SDL_Quit();
-    return EXIT_SUCCESS;
+    return exitcode;
 }
