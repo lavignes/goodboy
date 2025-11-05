@@ -84,12 +84,12 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to open ROM file: %s\n", strerror(errno));
         goto cleanupRenderer;
     }
-    while (fread(rom, 1, 4096, file)) {
-    }
-    int err = ferror(file);
-    if (err) {
-        fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
-        goto cleanupRenderer;
+    if (fread(rom, 1, sizeof(rom), file) == 0) {
+        int err = ferror(file);
+        if (err) {
+            fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
+            goto cleanupRenderer;
+        }
     }
     InputState istate = {0};
     ;

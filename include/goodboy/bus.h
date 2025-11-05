@@ -62,7 +62,7 @@ enum {
     PORT_WY    = 0xFF4A,
     PORT_WX    = 0xFF4B,
 
-    PORT_SYS   = 0xFF4D,
+    PORT_SYS   = 0xFF4C,
     PORT_SPD   = 0xFF4D,
     PORT_VBK   = 0xFF4F,
     PORT_BOOT  = 0xFF50,
