@@ -50,8 +50,37 @@ void inputWrite(InputState* state, U16 addr, U8 val) {
     TODO();
 }
 
+void serialWrite(void* state, U16 addr, U8 val) {
+    (void)state;
+    switch (addr) {
+    case PORT_SB:
+        fprintf(stdout, "%c", val);
+        return;
+    case PORT_SC:
+        return;
+    default:
+        UNREACHABLE();
+    }
+}
+
+void help(char const* name) {
+    fprintf(stderr, "Usage: %s [OPTIONS] [ROM]\n", name);
+}
+
 int main(int argc, char* argv[]) {
-    (void)argc;
+    FILE* romfile = NULL;
+    for (int argi = 1; argi < argc; ++argi) {
+        if ((strcmp(argv[argi], "-h") == 0) ||
+            (strcmp(argv[argi], "--help") == 0)) {
+            help(argv[0]);
+            return EXIT_SUCCESS;
+        }
+        romfile = fopen(argv[argi], "rb");
+        if (!romfile) {
+            fprintf(stderr, "Failed to open ROM file: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
+    }
     int exitcode = EXIT_FAILURE;
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
         fprintf(stderr, "Failed to initialize subsystems: %s\n",
@@ -78,17 +107,17 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to create texture: %s\n", SDL_GetError());
         goto cleanupRenderer;
     }
-    U8    rom[0x8000] = {0};
-    FILE* file        = fopen(argv[1], "rb");
-    if (!file) {
-        fprintf(stderr, "Failed to open ROM file: %s\n", strerror(errno));
-        goto cleanupRenderer;
-    }
-    if (fread(rom, 1, sizeof(rom), file) == 0) {
-        int err = ferror(file);
-        if (err) {
-            fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
-            goto cleanupRenderer;
+    U8 rom[0x8000] = {0};
+    if (romfile) {
+        if (fread(rom, 1, sizeof(rom), romfile) == 0) {
+            int err = ferror(romfile);
+            if (err) {
+                fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
+                goto cleanupTexture;
+            }
+        }
+        if (fclose(romfile) == EOF) {
+            fprintf(stderr, "Failed to close ROM file: %s\n", strerror(errno));
         }
     }
     InputState istate = {0};
@@ -110,7 +139,14 @@ int main(int argc, char* argv[]) {
                 .read  = (DevReadFn)inputRead,
                 .write = (DevWriteFn)inputWrite,
             },
-        .serial = DEV_NULL,
+        .serial =
+            {
+                .state = NULL,
+                .reset = DEV_NULL.reset,
+                .tick  = DEV_NULL.tick,
+                .read  = DEV_NULL.read,
+                .write = serialWrite,
+            },
     };
     busReset(&bus);
 
@@ -140,6 +176,7 @@ int main(int argc, char* argv[]) {
     }
 
     exitcode = EXIT_SUCCESS;
+cleanupTexture:
     SDL_DestroyTexture(texture);
 cleanupRenderer:
     SDL_DestroyRenderer(renderer);

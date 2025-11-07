@@ -5,8 +5,6 @@
 #include <goodboy/fatal.h>
 #include <goodboy/ppu.h>
 
-#include <stdio.h>
-
 enum {
     IFLAG_VBLANK  = 1 << 0,
     IFLAG_LCDSTAT = 1 << 1,
@@ -145,6 +143,10 @@ struct Bus {
     Dev input;
     Dev serial;
 
+    U8 div;
+    U8 tima;
+    U8 tma;
+    U8 tac;
     U8 iflags;
     U8 wbk;
     U8 ieflags;
@@ -161,11 +163,14 @@ static inline void busReset(Bus* bus) {
 }
 
 static inline Bool busTick(Bus* bus) {
-    cpuTick(&bus->cpu, bus);
-    Bool vblank = ppuTick(&bus->ppu, bus);
-    bus->mbc.tick(bus->mbc.state);
-    bus->input.tick(bus->input.state);
-    bus->serial.tick(bus->serial.state);
+    UInt cycles = cpuTick(&bus->cpu, bus);
+    Bool vblank = false;
+    for (UInt i = 0; i < cycles; ++i) {
+        vblank |= ppuTick(&bus->ppu, bus);
+        bus->mbc.tick(bus->mbc.state);
+        bus->input.tick(bus->input.state);
+        bus->serial.tick(bus->serial.state);
+    }
     return vblank;
 }
 
@@ -196,6 +201,17 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
         return 0xFF;
     case PORT_P1:
         return bus->input.read(bus->input.state, addr);
+    case PORT_SB:
+    case PORT_SC:
+        return bus->serial.read(bus->serial.state, addr);
+    case PORT_DIV:
+        return bus->div;
+    case PORT_TIMA:
+        return bus->tima;
+    case PORT_TMA:
+        return bus->tma;
+    case PORT_TAC:
+        return bus->tac;
     case PORT_IF:
         return bus->iflags;
     case PORT_NR10:
@@ -302,7 +318,20 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
         bus->input.write(bus->input.state, addr, val);
         return;
     case PORT_SB:
-        fprintf(stdout, "%02" U8_FMTX, val);
+    case PORT_SC:
+        bus->serial.write(bus->serial.state, addr, val);
+        return;
+    case PORT_DIV:
+        bus->div = val;
+        return;
+    case PORT_TIMA:
+        bus->tima = val;
+        return;
+    case PORT_TMA:
+        bus->tma = val;
+        return;
+    case PORT_TAC:
+        bus->tac = val;
         return;
     case PORT_IF:
         bus->iflags = val;

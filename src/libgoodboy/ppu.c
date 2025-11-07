@@ -40,8 +40,8 @@ static INLINE void drawLine(Ppu* ppu) {
     U8*  zline = ppu->zbuf[ppu->ly];
     memset(zline, 0, sizeof(*ppu->zbuf));
     U16       mapaddr = (ppu->lcdc & LCDC_BG_MAP)
-                            ? (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR)
-                            : (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR);
+                            ? (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR)
+                            : (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR);
     U8 const* idxs    = &ppu->vram[0][mapaddr];
     // U8 const* attrs   = &ppu->vram[1][mapaddr];
     U16       y       = (((U16)ppu->ly) + ((U16)ppu->scy)) % 256;
@@ -54,7 +54,7 @@ static INLINE void drawLine(Ppu* ppu) {
         // U8   attr   = attrs[mapidx];
         U16 tileoff = (ppu->lcdc & LCDC_TILES)
                           ? (((U16)idx) * 16)
-                          : ((U16)(0x1000 + (((U16)((I8)idx)) * 16)));
+                          : ((U16)(0x1000 + (((I16)((I8)idx)) * 16)));
         U16 tilex   = x % TILE_WIDTH;
         // TODO: index into U16 view of VRAM instead? if so,^ don't multiply
         // yoff by 2 and idx by 16.. it would be by 8 then.

@@ -38,8 +38,8 @@ static INLINE UInt storeIndirect(Bus* bus, U16 addr, U8 val) {
     return 8;
 }
 
-static INLINE UInt inc16(Reg* reg) {
-    ++reg->hl;
+static INLINE UInt inc16(U16* reg) {
+    ++(*reg);
     return 8;
 }
 
@@ -112,8 +112,8 @@ static INLINE UInt loadIndirect(Bus* bus, U8* dst, U16 addr) {
     return 8;
 }
 
-static INLINE UInt dec16(Reg* reg) {
-    --reg->hl;
+static INLINE UInt dec16(U16* reg) {
+    --(*reg);
     return 8;
 }
 
@@ -336,7 +336,7 @@ static INLINE UInt sbcIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 8;
 }
 
-static INLINE UInt andVal(Cpu* cpu, U8 val) {
+static INLINE U8 andVal(Cpu* cpu, U8 val) {
     U8 res = cpu->af.h & val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
@@ -373,7 +373,7 @@ static INLINE UInt xorIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 8;
 }
 
-static INLINE UInt orVal(Cpu* cpu, U8 val) {
+static INLINE U8 orVal(Cpu* cpu, U8 val) {
     U8 res = cpu->af.h | val;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
@@ -523,6 +523,12 @@ static INLINE UInt jmpHl(Cpu* cpu) {
     return 4;
 }
 
+static INLINE UInt storeIndirectImm16Addr(Cpu* cpu, Bus* bus) {
+    U16 addr = fetch16(cpu, bus);
+    busWrite(bus, addr, cpu->af.h);
+    return 16;
+}
+
 static INLINE UInt xorImm8(Cpu* cpu, Bus* bus) {
     U8 val    = fetch(cpu, bus);
     cpu->af.h = xorVal(cpu, val);
@@ -532,6 +538,12 @@ static INLINE UInt xorImm8(Cpu* cpu, Bus* bus) {
 static INLINE UInt loadIndirectHighImm8(Cpu* cpu, Bus* bus) {
     U16 offset = (U16)fetch(cpu, bus);
     cpu->af.h  = busRead(bus, 0xFF00 | offset);
+    return 12;
+}
+
+static INLINE UInt popAF(Cpu* cpu, Bus* bus) {
+    cpu->af.l = busRead(bus, cpu->sp++) & 0xF0;
+    cpu->af.h = busRead(bus, cpu->sp++);
     return 12;
 }
 
@@ -635,7 +647,7 @@ static INLINE UInt rrIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 16;
 }
 
-static INLINE UInt slaVal(Cpu* cpu, U8 val) {
+static INLINE U8 slaVal(Cpu* cpu, U8 val) {
     U8 carry = (val & 0x80) >> 7;
     U8 res   = val << 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -656,7 +668,7 @@ static INLINE UInt slaIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 16;
 }
 
-static INLINE UInt sraVal(Cpu* cpu, U8 val) {
+static INLINE U8 sraVal(Cpu* cpu, U8 val) {
     U8 carry = val & 0x01;
     U8 res   = ((I8)val) >> 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -677,7 +689,7 @@ static INLINE UInt sraIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 16;
 }
 
-static INLINE UInt swapVal(Cpu* cpu, U8 val) {
+static INLINE U8 swapVal(Cpu* cpu, U8 val) {
     U8 res = (val << 4) | (val >> 4);
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
     cpu->af.l |= (res == 0) ? FLAG_Z : 0;
@@ -696,7 +708,7 @@ static INLINE UInt swapIndirect(Cpu* cpu, Bus* bus, U16 addr) {
     return 16;
 }
 
-static INLINE UInt srlVal(Cpu* cpu, U8 val) {
+static INLINE U8 srlVal(Cpu* cpu, U8 val) {
     U8 carry = val & 0x01;
     U8 res   = val >> 1;
     cpu->af.l &= ~(FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
@@ -776,19 +788,19 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
         if (imask != 0) {
             if (imask & IFLAG_VBLANK) {
                 rst(cpu, bus, 0x0040);
-                bus->iflags ^= IFLAG_VBLANK;
+                bus->iflags &= ~IFLAG_VBLANK;
             } else if (imask & IFLAG_LCDSTAT) {
                 rst(cpu, bus, 0x0048);
-                bus->iflags ^= IFLAG_LCDSTAT;
+                bus->iflags &= ~IFLAG_LCDSTAT;
             } else if (imask & IFLAG_TIMER) {
                 rst(cpu, bus, 0x0050);
-                bus->iflags ^= IFLAG_TIMER;
+                bus->iflags &= ~IFLAG_TIMER;
             } else if (imask & IFLAG_SERIAL) {
                 rst(cpu, bus, 0x0058);
-                bus->iflags ^= IFLAG_SERIAL;
+                bus->iflags &= ~IFLAG_SERIAL;
             } else if (imask & IFLAG_JOYPAD) {
                 rst(cpu, bus, 0x0060);
-                bus->iflags ^= IFLAG_JOYPAD;
+                bus->iflags &= ~IFLAG_JOYPAD;
             }
             cpu->ime = false;
             return 20;
@@ -802,7 +814,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x02:
         return storeIndirect(bus, cpu->bc.hl, cpu->af.h);
     case 0x03:
-        return inc16(&cpu->bc);
+        return inc16(&cpu->bc.hl);
     case 0x04:
         return inc(cpu, &cpu->bc.h);
     case 0x05:
@@ -818,7 +830,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x0A:
         return loadIndirect(bus, &cpu->af.h, cpu->bc.hl);
     case 0x0B:
-        return dec16(&cpu->bc);
+        return dec16(&cpu->bc.hl);
     case 0x0C:
         return inc(cpu, &cpu->bc.l);
     case 0x0D:
@@ -835,7 +847,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x12:
         return storeIndirect(bus, cpu->de.hl, cpu->af.h);
     case 0x13:
-        return inc16(&cpu->de);
+        return inc16(&cpu->de.hl);
     case 0x14:
         return inc(cpu, &cpu->de.h);
     case 0x15:
@@ -851,7 +863,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x1A:
         return loadIndirect(bus, &cpu->af.h, cpu->de.hl);
     case 0x1B:
-        return dec16(&cpu->de);
+        return dec16(&cpu->de.hl);
     case 0x1C:
         return inc(cpu, &cpu->de.l);
     case 0x1D:
@@ -868,7 +880,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x22:
         return storeIndirect(bus, cpu->hl.hl++, cpu->af.h);
     case 0x23:
-        return inc16(&cpu->hl);
+        return inc16(&cpu->hl.hl);
     case 0x24:
         return inc(cpu, &cpu->hl.h);
     case 0x25:
@@ -884,7 +896,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x2A:
         return loadIndirect(bus, &cpu->af.h, cpu->hl.hl++);
     case 0x2B:
-        return dec16(&cpu->hl);
+        return dec16(&cpu->hl.hl);
     case 0x2C:
         return inc(cpu, &cpu->hl.l);
     case 0x2D:
@@ -901,7 +913,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x32:
         return storeIndirect(bus, cpu->hl.hl--, cpu->af.h);
     case 0x33:
-        return inc16((Reg*)&cpu->sp);
+        return inc16(&cpu->sp);
     case 0x34:
         return incIndirect(cpu, bus, cpu->hl.hl);
     case 0x35:
@@ -917,7 +929,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0x3A:
         return loadIndirect(bus, &cpu->af.h, cpu->hl.hl--);
     case 0x3B:
-        return dec16((Reg*)&cpu->sp);
+        return dec16(&cpu->sp);
     case 0x3C:
         return inc(cpu, &cpu->af.h);
     case 0x3D:
@@ -1278,7 +1290,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0xE9:
         return jmpHl(cpu);
     case 0xEA:
-        return storeIndirect(bus, cpu->hl.hl, cpu->af.h);
+        return storeIndirectImm16Addr(cpu, bus);
     case 0xEB:
         return 4;
     case 0xEC:
@@ -1293,7 +1305,7 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
     case 0xF0:
         return loadIndirectHighImm8(cpu, bus);
     case 0xF1:
-        return pop(cpu, bus, (Reg*)&cpu->af);
+        return popAF(cpu, bus);
     case 0xF2:
         return loadIndirectHighC(cpu, bus);
     case 0xF3:
