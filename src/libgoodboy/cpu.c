@@ -133,7 +133,7 @@ static INLINE UInt rrca(Cpu* cpu) {
 }
 
 static INLINE UInt stop(Cpu* cpu, Bus* bus) {
-    cpu->stopped = true;
+    cpu->stopped = TRUE;
     fetch(cpu, bus);
     return 4;
 }
@@ -184,28 +184,29 @@ static INLINE UInt jrCondition(Cpu* cpu, Bus* bus, Bool condition) {
 }
 
 static INLINE UInt daa(Cpu* cpu) {
-    U8 a = cpu->af.h;
-    U8 f = cpu->af.l;
-    if (f & FLAG_N) {
-        if (f & FLAG_H) {
-            a -= 0x06;
+    U8 val   = cpu->af.h;
+    U8 flags = cpu->af.l;
+    U8 res   = val;
+    if (flags & FLAG_N) {
+        if (flags & FLAG_H) {
+            res -= 0x06;
         }
-        if (f & FLAG_C) {
-            a -= 0x60;
+        if (flags & FLAG_C) {
+            res -= 0x60;
         }
     } else {
-        if ((f & FLAG_H) || ((a & 0x0F) > 0x09)) {
-            a += 0x06;
+        if ((flags & FLAG_H) || ((val & 0x0F) > 0x09)) {
+            res += 0x06;
         }
-        if ((f & FLAG_C) || (a > 0x99)) {
-            a += 0x60;
-            f |= FLAG_C;
+        if ((flags & FLAG_C) || (val > 0x99)) {
+            res += 0x60;
+            flags |= FLAG_C;
         }
     }
-    f &= ~FLAG_H;
-    f |= (a == 0) ? FLAG_Z : 0;
-    cpu->af.h = a;
-    cpu->af.l = f;
+    flags &= ~(FLAG_Z | FLAG_H);
+    flags |= (res == 0) ? FLAG_Z : 0;
+    cpu->af.h = res;
+    cpu->af.l = flags;
     return 4;
 }
 
@@ -265,7 +266,7 @@ static INLINE UInt copy(U8* dst, U8* src) {
 }
 
 static INLINE UInt halt(Cpu* cpu) {
-    cpu->halted = true;
+    cpu->halted = TRUE;
     return 4;
 }
 
@@ -476,7 +477,7 @@ static INLINE UInt subImm8(Cpu* cpu, Bus* bus) {
 }
 
 static INLINE UInt reti(Cpu* cpu, Bus* bus) {
-    cpu->ime = true;
+    cpu->ime = TRUE;
     return ret(cpu, bus);
 }
 
@@ -553,7 +554,7 @@ static INLINE UInt loadIndirectHighC(Cpu* cpu, Bus* bus) {
 }
 
 static INLINE UInt di(Cpu* cpu) {
-    cpu->ime = false;
+    cpu->ime = FALSE;
     return 4;
 }
 
@@ -589,7 +590,7 @@ static INLINE UInt loadIndirectImm16(Cpu* cpu, Bus* bus) {
 }
 
 static INLINE UInt ei(Cpu* cpu) {
-    cpu->ime = true;
+    cpu->ime = TRUE;
     return 4;
 }
 
@@ -782,27 +783,27 @@ UInt cpuTick(Cpu* cpu, Bus* bus) {
         if (imask == 0) {
             return 4;
         }
-        cpu->halted = false;
+        cpu->halted = FALSE;
     }
     if (cpu->ime) {
         if (imask != 0) {
-            if (imask & IFLAG_VBLANK) {
+            if (imask & INT_VBLANK) {
                 rst(cpu, bus, 0x0040);
-                bus->iflags &= ~IFLAG_VBLANK;
-            } else if (imask & IFLAG_LCDSTAT) {
+                bus->iflags &= ~INT_VBLANK;
+            } else if (imask & INT_LCDSTAT) {
                 rst(cpu, bus, 0x0048);
-                bus->iflags &= ~IFLAG_LCDSTAT;
-            } else if (imask & IFLAG_TIMER) {
+                bus->iflags &= ~INT_LCDSTAT;
+            } else if (imask & INT_TIMER) {
                 rst(cpu, bus, 0x0050);
-                bus->iflags &= ~IFLAG_TIMER;
-            } else if (imask & IFLAG_SERIAL) {
+                bus->iflags &= ~INT_TIMER;
+            } else if (imask & INT_SERIAL) {
                 rst(cpu, bus, 0x0058);
-                bus->iflags &= ~IFLAG_SERIAL;
-            } else if (imask & IFLAG_JOYPAD) {
+                bus->iflags &= ~INT_SERIAL;
+            } else if (imask & INT_JOYPAD) {
                 rst(cpu, bus, 0x0060);
-                bus->iflags &= ~IFLAG_JOYPAD;
+                bus->iflags &= ~INT_JOYPAD;
             }
-            cpu->ime = false;
+            cpu->ime = FALSE;
             return 20;
         }
     }

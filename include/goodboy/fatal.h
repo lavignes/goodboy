@@ -6,7 +6,7 @@
 #define NORETURN                 _Noreturn
 #define STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 
-#define INLINE                   inline
+#define INLINE inline
 #ifdef __has_attribute
 #if __has_attribute(always_inline)
 #undef INLINE

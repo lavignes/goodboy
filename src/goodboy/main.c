@@ -1,56 +1,150 @@
 #include <goodboy/bus.h>
 
+#include <SDL2/SDL.h>
+
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <SDL2/SDL.h>
+typedef struct {
+    U8 rom[0x8000];
+} Mbc0State;
 
-void mbcReset(U8 rom[]) { (void)rom; }
-
-U8 mbcRead(U8 rom[], U16 addr) { return rom[addr]; }
-
-void mbcWrite(U8 rom[], U16 addr, U8 val) { rom[addr] = val; }
+U8 mbc0Read(Mbc0State* state, U16 addr) { return state->rom[addr]; }
 
 typedef struct {
-    UInt counter;
-    U8   p1;
-    Bool quit;
+    U8 rom[0x80][0x4000];
+    U8 sram[4][0x2000];
+
+    U8   rombank;
+    U8   srambank;
+    Bool sramenable;
+} Mbc1State;
+
+U8 mbc1Read(Mbc1State* state, U16 addr) {
+    switch (addr) {
+    case ROM_BANK0_START_ADDR ... ROM_BANK0_END_ADDR:
+        return state->rom[0][addr - ROM_BANK0_START_ADDR];
+    case ROM_BANKX_START_ADDR ... ROM_BANKX_END_ADDR:
+        return state->rom[state->rombank][addr - ROM_BANKX_START_ADDR];
+    case SRAM_START_ADDR ... SRAM_END_ADDR:
+        return state->sram[state->srambank][addr - SRAM_START_ADDR];
+    default:
+        UNREACHABLE();
+    }
+}
+
+void mbc1Write(Mbc1State* state, U16 addr, U8 val) {
+    switch (addr) {
+    case 0x0000 ... 0x1FFF:
+        state->sramenable = ((val & 0x0F) == 0x0A);
+        return;
+    case 0x2000 ... 0x3FFF: {
+        U8 bank = val & 0x1F;
+        switch (bank) {
+        case 0x00:
+        case 0x20:
+        case 0x40:
+        case 0x60:
+            ++bank;
+            break;
+        default:
+            break;
+        }
+        state->rombank = bank; // TODO: wrap to actual rom size
+        return;
+    }
+    default:
+        UNREACHABLE();
+    }
+}
+
+typedef struct {
+    UInt      ticks;
+    U8        p1;
+    Bool      quit;
+    U8 const* keys;
 } InputState;
 
-void inputReset(InputState* state) { (void)state; }
+static void inputReset(InputState* state) {
+    memset(state, 0, sizeof(*state));
+    state->p1   = P1_MASK;
+    state->keys = SDL_GetKeyboardState(NULL);
+}
 
-void inputTick(InputState* state) {
-    ++state->counter;
-    if (state->counter > (4194304 / 60)) {
-        state->counter = 0;
+static void inputTick(InputState* state) {
+    ++state->ticks;
+    if (state->ticks > (CPU_FREQ_NORMAL / 60)) {
+        state->ticks = 0;
         SDL_PumpEvents();
-        U8 const* keys = SDL_GetKeyboardState(NULL);
-        if (keys[SDL_SCANCODE_ESCAPE]) {
-            state->quit = true;
+        if (state->keys[SDL_SCANCODE_ESCAPE]) {
+            state->quit = TRUE;
         }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                state->quit = true;
+            switch (event.type) {
+            case SDL_QUIT:
+                state->quit = TRUE;
+                break;
+            default:
+                break;
             }
         }
     }
 }
 
-U8 inputRead(InputState* state, U16 addr) {
-    (void)addr;
-    return state->p1;
+static U8 inputRead(InputState* state, U16 addr) {
+    switch (addr) {
+    case PORT_P1:
+        return state->p1;
+    default:
+        UNREACHABLE();
+    }
 }
 
-void inputWrite(InputState* state, U16 addr, U8 val) {
-    (void)state;
-    (void)addr;
-    (void)val;
-    TODO();
+static void inputWrite(InputState* state, U16 addr, U8 val) {
+    switch (addr) {
+    case PORT_P1:
+        if (!(val & P1_CTRL_DPAD)) {
+            state->p1 |= P1_DPAD_MASK;
+            if (state->keys[SDL_SCANCODE_RIGHT]) {
+                state->p1 &= ~P1_RIGHT;
+            }
+            if (state->keys[SDL_SCANCODE_LEFT]) {
+                state->p1 &= ~P1_LEFT;
+            }
+            if (state->keys[SDL_SCANCODE_UP]) {
+                state->p1 &= ~P1_UP;
+            }
+            if (state->keys[SDL_SCANCODE_DOWN]) {
+                state->p1 &= ~P1_DOWN;
+            }
+            return;
+        }
+        if (!(val & P1_CTRL_BUTTONS)) {
+            state->p1 |= P1_BUTTONS_MASK;
+            if (state->keys[SDL_SCANCODE_Z]) {
+                state->p1 &= ~P1_A;
+            }
+            if (state->keys[SDL_SCANCODE_X]) {
+                state->p1 &= ~P1_B;
+            }
+            if (state->keys[SDL_SCANCODE_RSHIFT]) {
+                state->p1 &= ~P1_SELECT;
+            }
+            if (state->keys[SDL_SCANCODE_RETURN]) {
+                state->p1 &= ~P1_START;
+            }
+            return;
+        }
+        state->p1 |= P1_MASK;
+        return;
+    default:
+        UNREACHABLE();
+    }
 }
 
-void serialWrite(void* state, U16 addr, U8 val) {
+static void serialWrite(void* state, U16 addr, U8 val) {
     (void)state;
     switch (addr) {
     case PORT_SB:
@@ -63,17 +157,32 @@ void serialWrite(void* state, U16 addr, U8 val) {
     }
 }
 
-void help(char const* name) {
-    fprintf(stderr, "Usage: %s [OPTIONS] [ROM]\n", name);
+static void help(char const* name) {
+    fprintf(stderr,
+            "Usage: %s [OPTIONS] [ROM]\n"
+            "\n"
+            "Arguments:\n"
+            "  [ROM]  Gameboy ROM file to load\n"
+            "\n"
+            "Options:\n"
+            "  -b, --skip-boot    Skip the boot ROM (Nintendo Logo)\n"
+            "  -h, --help         Show this help message and exit\n",
+            name);
 }
 
 int main(int argc, char* argv[]) {
-    FILE* romfile = NULL;
+    FILE* romfile  = NULL;
+    Bool  skipboot = FALSE;
     for (int argi = 1; argi < argc; ++argi) {
         if ((strcmp(argv[argi], "-h") == 0) ||
             (strcmp(argv[argi], "--help") == 0)) {
             help(argv[0]);
             return EXIT_SUCCESS;
+        }
+        if ((strcmp(argv[argi], "-b") == 0) ||
+            (strcmp(argv[argi], "--skip-boot") == 0)) {
+            skipboot = TRUE;
+            continue;
         }
         romfile = fopen(argv[argi], "rb");
         if (!romfile) {
@@ -107,9 +216,9 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to create texture: %s\n", SDL_GetError());
         goto cleanupRenderer;
     }
-    U8 rom[0x8000] = {0};
+    Mbc0State mbcstate = {0};
     if (romfile) {
-        if (fread(rom, 1, sizeof(rom), romfile) == 0) {
+        if (fread(mbcstate.rom, 1, sizeof(mbcstate.rom), romfile) == 0) {
             int err = ferror(romfile);
             if (err) {
                 fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
@@ -121,39 +230,55 @@ int main(int argc, char* argv[]) {
         }
     }
     InputState istate = {0};
-    ;
-    Bus bus = {
-        .cart =
-            {
-                .state = &rom,
-                .reset = (DevResetFn)mbcReset,
-                .tick  = DEV_NULL.tick,
-                .read  = (DevReadFn)mbcRead,
-                .write = (DevWriteFn)mbcWrite,
-            },
-        .input =
-            {
-                .state = &istate,
-                .reset = (DevResetFn)inputReset,
-                .tick  = (DevTickFn)inputTick,
-                .read  = (DevReadFn)inputRead,
-                .write = (DevWriteFn)inputWrite,
-            },
-        .serial =
-            {
-                .state = NULL,
-                .reset = DEV_NULL.reset,
-                .tick  = DEV_NULL.tick,
-                .read  = DEV_NULL.read,
-                .write = serialWrite,
-            },
+    Bus        bus    = {0};
+
+    bus.cart = (Dev){
+        .state = &mbcstate,
+        .reset = DEV_NULL.reset,
+        .tick  = DEV_NULL.tick,
+        .read  = (DevReadFn)mbc0Read,
+        .write = DEV_NULL.write,
+    };
+    bus.input = (Dev){
+        .state = &istate,
+        .reset = (DevResetFn)inputReset,
+        .tick  = (DevTickFn)inputTick,
+        .read  = (DevReadFn)inputRead,
+        .write = (DevWriteFn)inputWrite,
+    };
+    bus.serial = (Dev){
+        .state = NULL,
+        .reset = DEV_NULL.reset,
+        .tick  = DEV_NULL.tick,
+        .read  = DEV_NULL.read,
+        .write = serialWrite,
     };
     busReset(&bus);
 
-    UInt frames = 0;
+#ifndef GB_DOCTOR_DEBUG
+    if (skipboot) {
+#endif // GB_DOCTOR_DEBUG
+        busWrite(&bus, PORT_BOOT, 0x01);
+        bus.cpu.af.h = 0x01;
+        bus.cpu.af.l = 0xB0;
+        bus.cpu.bc.h = 0x00;
+        bus.cpu.bc.l = 0x13;
+        bus.cpu.de.h = 0x00;
+        bus.cpu.de.l = 0xD8;
+        bus.cpu.hl.h = 0x01;
+        bus.cpu.hl.l = 0x4D;
+        bus.cpu.sp   = 0xFFFE;
+        bus.cpu.pc   = 0x0100;
+#ifndef GB_DOCTOR_DEBUG
+    }
+#endif // GB_DOCTOR_DEBUG
+
+    UInt fps    = 0;
+    UInt cycles = 0;
     U64  last   = SDL_GetTicks64();
     while (!istate.quit) {
-        if (busTick(&bus)) {
+        cycles += busTick(&bus);
+        if (bus.vblanked) {
             void* pixels;
             int   pitch;
             SDL_LockTexture(texture, NULL, &pixels, &pitch);
@@ -162,15 +287,19 @@ int main(int argc, char* argv[]) {
             SDL_RenderClear(renderer);
             SDL_RenderCopy(renderer, texture, NULL, NULL);
             SDL_RenderPresent(renderer);
-            ++frames;
+            ++fps;
         }
         U64 now = SDL_GetTicks64();
         if ((now - last) >= 1000) {
+            F64  mhz = ((F64)cycles) / 1000000.0;
             char title[64];
-            snprintf(title, sizeof(title), "goodboy - %" UINT_FMT " fps",
-                     frames);
+            snprintf(title, sizeof(title),
+                     "goodboy :: %" UINT_FMT " fps :: "
+                     "%.03" F64_FMT " MHz",
+                     fps, mhz);
             SDL_SetWindowTitle(win, title);
-            frames = 0;
+            fps    = 0;
+            cycles = 0;
             last   = now;
         }
     }

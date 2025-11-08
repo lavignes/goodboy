@@ -1,11 +1,14 @@
 #ifndef GB_ABI_H
 #define GB_ABI_H
 
+#include <float.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef bool Bool;
+#define TRUE  true
+#define FALSE false
 
 typedef uint8_t U8;
 typedef int8_t  I8;
@@ -57,12 +60,16 @@ typedef intptr_t  Int;
 #define UINT_FMTX PRIXPTR
 #define INT_FMT   PRIiPTR
 
-static inline UInt uIntMax(UInt lhs, UInt rhs) {
-    return (lhs > rhs) ? lhs : rhs;
-}
+typedef float F32;
+#define F32_MAX     FLT_MAX
+#define F32_MIN     FLT_MIN
+#define F32_EPSILON FLT_EPSILON
+#define F32_FMT     "f"
 
-static inline UInt uIntMin(UInt lhs, UInt rhs) {
-    return (lhs < rhs) ? lhs : rhs;
-}
+typedef double F64;
+#define F64_MAX     DBL_MAX
+#define F64_MIN     DBL_MIN
+#define F64_EPSILON DBL_EPSILON
+#define F64_FMT     "lf"
 
 #endif // GB_ABI_H

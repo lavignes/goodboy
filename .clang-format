@@ -9,8 +9,8 @@ TabWidth: 4
 
 PointerAlignment: Left
 
-AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
-AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignConsecutiveAssignments: AcrossComments
+AlignConsecutiveMacros: AcrossComments
 AlignEscapedNewlines: Right
 AlignConsecutiveDeclarations: AcrossComments
 

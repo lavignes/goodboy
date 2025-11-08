@@ -13,6 +13,11 @@ enum {
     FLAG_C = 1 << 4,
 };
 
+enum {
+    CPU_FREQ_NORMAL = 4194304,
+    CPU_FREQ_DOUBLE = CPU_FREQ_NORMAL * 2,
+};
+
 typedef union {
     U16 hl;
     struct {

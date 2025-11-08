@@ -25,10 +25,10 @@ enum {
 enum {
     STAT_MODE_MASK = 0x03,
     STAT_LYC       = 1 << 2,
-    STAT_MODE0_INT = 1 << 3, // hblank
-    STAT_MODE1_INT = 1 << 4, // vblank
-    STAT_MODE2_INT = 1 << 5, // oam scan
-    STAT_LYC_INT   = 1 << 6,
+    STAT_INT_MODE0 = 1 << 3, // hblank
+    STAT_INT_MODE1 = 1 << 4, // vblank
+    STAT_INT_MODE2 = 1 << 5, // oam scan
+    STAT_INT_LYC   = 1 << 6, // ly==lyc
 };
 
 enum {
@@ -38,9 +38,9 @@ enum {
 };
 
 enum {
-    VRAM_SIZE         = 0x2000,
-    VRAM_START_ADDR   = 0x8000,
-    VRAM_END_ADDR     = VRAM_START_ADDR + VRAM_SIZE - 1,
+    VRAM_SIZE       = 0x2000,
+    VRAM_START_ADDR = 0x8000,
+    VRAM_END_ADDR   = VRAM_START_ADDR + VRAM_SIZE - 1,
 
     VRAM_BG_MAP0_ADDR = 0x9800,
     VRAM_BG_MAP1_ADDR = 0x9C00,
