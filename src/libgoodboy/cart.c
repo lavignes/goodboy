@@ -97,7 +97,7 @@ typedef struct {
     U8   loreg;
     U8   hireg;
     U32  rom0base;
-    U32  rom1base;
+    U32  romXbase;
     U32  rommask;
     U16  rambase;
     U16  rammask;
@@ -111,28 +111,31 @@ static void mbc1Fini(Mbc1* mbc1) {
     free(mbc1);
 }
 
+static INLINE void mbc1Logic(Mbc1* mbc1) {
+    if (mbc1->loreg == 0) {
+        mbc1->loreg = 1;
+    }
+    mbc1->romXbase = (mbc1->hireg << 18) | (mbc1->loreg << 13);
+    if (mbc1->mode == 0) {
+        mbc1->rom0base = 0;
+        mbc1->rambase  = 0;
+        return;
+    }
+    mbc1->rom0base = mbc1->hireg << 18;
+    mbc1->rambase  = mbc1->hireg << 12;
+}
+
 static void mbc1Reset(Mbc1* mbc1) {
     mbc1->loreg      = 0;
     mbc1->hireg      = 0;
     mbc1->rom0base   = 0;
-    mbc1->rom1base   = 0;
+    mbc1->romXbase   = 0;
     mbc1->rommask    = mbc1->rom.cap - 1;
     mbc1->rambase    = 0;
     mbc1->rammask    = mbc1->ram.cap - 1;
     mbc1->ramenabled = FALSE;
     mbc1->mode       = 0;
-}
-
-static INLINE void mbc1Rebase(Mbc1* mbc1) {
-    if (mbc1->mode == 0) {
-        mbc1->rom0base = 0;
-        mbc1->rom1base = (mbc1->hireg << 18) | (mbc1->loreg << 13);
-        mbc1->rambase  = 0;
-        return;
-    }
-    mbc1->rom0base = mbc1->hireg << 18;
-    mbc1->rom1base = mbc1->loreg;
-    mbc1->rambase  = (mbc1->hireg << 12);
+    mbc1Logic(mbc1);
 }
 
 static U8 mbc1Read(Mbc1* mbc1, U16 addr) {
@@ -140,7 +143,7 @@ static U8 mbc1Read(Mbc1* mbc1, U16 addr) {
     case ROM_BANK0_START_ADDR ... ROM_BANK0_END_ADDR:
         return mbc1->rom.view.bytes[(mbc1->rom0base + addr) & mbc1->rommask];
     case ROM_BANKX_START_ADDR ... ROM_BANKX_END_ADDR:
-        return mbc1->rom.view.bytes[(mbc1->rom1base + addr) & mbc1->rommask];
+        return mbc1->rom.view.bytes[(mbc1->romXbase + addr) & mbc1->rommask];
     case CRAM_START_ADDR ... CRAM_END_ADDR:
         if (!mbc1->ramenabled) {
             return 0xFF;
@@ -159,18 +162,15 @@ static void mbc1Write(Mbc1* mbc1, U16 addr, U8 val) {
         break;
     case 0x2000 ... 0x3FFF:
         mbc1->loreg = val & 0x1F;
-        if (mbc1->loreg == 0) {
-            mbc1->loreg = 1;
-        }
-        mbc1Rebase(mbc1);
+        mbc1Logic(mbc1);
         break;
     case 0x4000 ... 0x5FFF:
         mbc1->hireg = val & 0x03;
-        mbc1Rebase(mbc1);
+        mbc1Logic(mbc1);
         break;
     case 0x6000 ... 0x7FFF:
         mbc1->mode = val & 0x01;
-        mbc1Rebase(mbc1);
+        mbc1Logic(mbc1);
         break;
     case CRAM_START_ADDR ... CRAM_END_ADDR:
         if (!mbc1->ramenabled) {
@@ -286,8 +286,8 @@ Int cartInit(Cart* cart, FILE* romfile) {
             fatal("out of memory\n");
         }
         mbc1->rom.view.bytes = rom;
-        mbc1->rom.view.len   = (UInt)filesize;
-        mbc1->rom.cap        = (UInt)filesize;
+        mbc1->rom.view.len   = *romsize;
+        mbc1->rom.cap        = *romsize;
         mbc1->ram.view.bytes = ram;
         mbc1->ram.view.len   = *ramsize;
         mbc1->ram.cap        = *ramsize;
