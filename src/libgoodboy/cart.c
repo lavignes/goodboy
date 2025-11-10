@@ -138,13 +138,9 @@ static INLINE void mbc1Rebase(Mbc1* mbc1) {
 static U8 mbc1Read(Mbc1* mbc1, U16 addr) {
     switch (addr) {
     case ROM_BANK0_START_ADDR ... ROM_BANK0_END_ADDR:
-        return mbc1->rom.view
-            .bytes[(mbc1->rom0base + addr - ROM_BANK0_START_ADDR) &
-                   mbc1->rommask];
+        return mbc1->rom.view.bytes[(mbc1->rom0base + addr) & mbc1->rommask];
     case ROM_BANKX_START_ADDR ... ROM_BANKX_END_ADDR:
-        return mbc1->rom.view
-            .bytes[(mbc1->rom1base + addr - ROM_BANKX_START_ADDR) &
-                   mbc1->rommask];
+        return mbc1->rom.view.bytes[(mbc1->rom1base + addr) & mbc1->rommask];
     case CRAM_START_ADDR ... CRAM_END_ADDR:
         if (!mbc1->ramenabled) {
             return 0xFF;

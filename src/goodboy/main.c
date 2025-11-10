@@ -210,10 +210,7 @@ int main(int argc, char* argv[]) {
         .write = serialWrite,
     };
     busReset(&bus);
-
-#ifndef GB_DOCTOR_DEBUG
     if (skipboot) {
-#endif // GB_DOCTOR_DEBUG
         busWrite(&bus, PORT_BOOT, 0x01);
         bus.cpu.af.h = 0x01;
         bus.cpu.af.l = 0xB0;
@@ -225,10 +222,7 @@ int main(int argc, char* argv[]) {
         bus.cpu.hl.l = 0x4D;
         bus.cpu.sp   = 0xFFFE;
         bus.cpu.pc   = 0x0100;
-#ifndef GB_DOCTOR_DEBUG
     }
-#endif // GB_DOCTOR_DEBUG
-
     UInt fps    = 0;
     UInt cycles = 0;
     U64  last   = SDL_GetTicks64();

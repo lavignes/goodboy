@@ -253,11 +253,7 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
     case PORT_SCX:
         return bus->ppu.scx;
     case PORT_LY:
-#ifdef GB_DOCTOR_DEBUG
-        return 0x90;
-#else
         return bus->ppu.ly;
-#endif // GB_DOCTOR_DEBUG
     case PORT_LYC:
         return bus->ppu.lyc;
     case PORT_DMA:
@@ -285,7 +281,7 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
     case PORT_BCPD:
     case PORT_OCPS:
     case PORT_OCPD:
-        TODO();
+        TODO(": %04" U16_FMTX "?\n", addr);
     case HRAM_START_ADDR ... HRAM_END_ADDR:
         return bus->hram[addr - HRAM_START_ADDR];
     case PORT_IE:
@@ -426,7 +422,7 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case PORT_BCPD:
     case PORT_OCPS:
     case PORT_OCPD:
-        TODO();
+        TODO(": %04" U16_FMTX " = %" U8_FMTX "?\n", addr, val);
     case HRAM_START_ADDR ... HRAM_END_ADDR:
         bus->hram[addr - HRAM_START_ADDR] = val;
         return;
