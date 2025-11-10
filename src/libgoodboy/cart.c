@@ -115,14 +115,14 @@ static INLINE void mbc1Logic(Mbc1* mbc1) {
     if (mbc1->loreg == 0) {
         mbc1->loreg = 1;
     }
-    mbc1->romXbase = (mbc1->hireg << 18) | (mbc1->loreg << 13);
+    mbc1->romXbase = ((mbc1->hireg << 19) | (mbc1->loreg << 14)) - ROM_BANKX_START_ADDR;
     if (mbc1->mode == 0) {
         mbc1->rom0base = 0;
         mbc1->rambase  = 0;
         return;
     }
-    mbc1->rom0base = mbc1->hireg << 18;
-    mbc1->rambase  = mbc1->hireg << 12;
+    mbc1->rom0base = mbc1->hireg << 19;
+    mbc1->rambase  = mbc1->hireg << 13;
 }
 
 static void mbc1Reset(Mbc1* mbc1) {
@@ -130,9 +130,7 @@ static void mbc1Reset(Mbc1* mbc1) {
     mbc1->hireg      = 0;
     mbc1->rom0base   = 0;
     mbc1->romXbase   = 0;
-    mbc1->rommask    = mbc1->rom.cap - 1;
     mbc1->rambase    = 0;
-    mbc1->rammask    = mbc1->ram.cap - 1;
     mbc1->ramenabled = FALSE;
     mbc1->mode       = 0;
     mbc1Logic(mbc1);
@@ -288,9 +286,11 @@ Int cartInit(Cart* cart, FILE* romfile) {
         mbc1->rom.view.bytes = rom;
         mbc1->rom.view.len   = *romsize;
         mbc1->rom.cap        = *romsize;
+        mbc1->rommask        = *romsize - 1;
         mbc1->ram.view.bytes = ram;
         mbc1->ram.view.len   = *ramsize;
         mbc1->ram.cap        = *ramsize;
+        mbc1->rammask        = *ramsize - 1;
 
         cart->mbc = (Dev){
             .state = mbc1,
