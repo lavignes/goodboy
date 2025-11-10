@@ -13,3 +13,12 @@ FORMAT(1) NORETURN void fatal(char const* fmt, ...) {
     va_start(args, fmt);
     fatalV(fmt, args);
 }
+
+void debugV(char const* fmt, va_list args) { vfprintf(stderr, fmt, args); }
+
+FORMAT(1) void debug(char const* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    debugV(fmt, args);
+    va_end(args);
+}

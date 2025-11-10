@@ -66,31 +66,39 @@ static INLINE void drawLine(Ppu* ppu) {
     U32* line  = ppu->pixels[ppu->ly];
     U8*  zline = ppu->zbuf[ppu->ly];
     memset(zline, 0, sizeof(*ppu->zbuf));
-    U16       mapaddr = (ppu->lcdc & LCDC_BG_MAP)
-                            ? (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR)
-                            : (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR);
-    U8 const* idxs    = &ppu->vram[0][mapaddr];
-    // U8 const* attrs   = &ppu->vram[1][mapaddr];
-    U8        y       = ppu->ly + ppu->scy;
-    // Pixel y-offset into tile data (2 bytes per pixel)
-    U8        tiley   = 2 * (y % TILE_HEIGHT);
-    for (U16 dot = 0; dot < SCREEN_WIDTH; ++dot) {
-        U8  x       = dot + ppu->scx;
-        U16 mapidx  = (((U16)x) / TILE_WIDTH) + ((((U16)y) / TILE_HEIGHT) * 32);
-        U8  idx     = idxs[mapidx];
-        // U8   attr   = attrs[mapidx];
-        U16 tileoff = (ppu->lcdc & LCDC_TILES)
-                          ? (((U16)idx) * 16)
-                          : ((U16)(0x1000 + (((I16)((I8)idx)) * 16)));
-        U8  tilex   = x % TILE_WIDTH;
-        // TODO: index into U16 view of VRAM instead? if so,^ don't multiply
-        // yoff by 2 and idx by 16.. it would be by 8 then.
-        U8  patlo   = ppu->vram[0][tileoff + tiley + 0];
-        U8  pathi   = ppu->vram[0][tileoff + tiley + 1];
-        U8  bitlo   = (patlo & (0x80 >> tilex)) != 0;
-        U8  bithi   = (pathi & (0x80 >> tilex)) != 0;
-        U8  bits    = (bithi << 1) | bitlo;
-        line[dot]   = DMG_PALETTE[(ppu->bgp >> (bits * 2)) & 0x03];
+    {
+        U16       mapaddr = (ppu->lcdc & LCDC_BG_MAP)
+                                ? (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR)
+                                : (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR);
+        U8 const* idxs    = &ppu->vram[0][mapaddr];
+        // U8 const* attrs   = &ppu->vram[1][mapaddr];
+        U8        y       = ppu->ly + ppu->scy;
+        // Pixel y-offset into tile data (2 bytes per pixel)
+        U8        tiley   = 2 * (y % TILE_HEIGHT);
+        for (U8 dot = 0; dot < SCREEN_WIDTH; ++dot) {
+            U8  x = dot + ppu->scx;
+            U16 mapidx =
+                (((U16)x) / TILE_WIDTH) + ((((U16)y) / TILE_HEIGHT) * 32);
+            U8  idx     = idxs[mapidx];
+            // U8   attr   = attrs[mapidx];
+            U16 tileoff = (ppu->lcdc & LCDC_TILES)
+                              ? (((U16)idx) * 16)
+                              : ((U16)(0x1000 + (((I16)((I8)idx)) * 16)));
+            U8  tilex   = x % TILE_WIDTH;
+            // TODO: index into U16 view of VRAM instead? if so,^ don't multiply
+            // yoff by 2 and idx by 16.. it would be by 8 then.
+            U8  patlo   = ppu->vram[0][tileoff + tiley + 0];
+            U8  pathi   = ppu->vram[0][tileoff + tiley + 1];
+            U8  bitlo   = (patlo & (0x80 >> tilex)) != 0;
+            U8  bithi   = (pathi & (0x80 >> tilex)) != 0;
+            U8  bits    = (bithi << 1) | bitlo;
+            U8  z       = (bits) ? 0x80 : 0x7F;
+            if (z < zline[dot]) {
+                continue;
+            }
+            zline[dot] = z;
+            line[dot]  = DMG_PALETTE[(ppu->bgp >> (bits * 2)) & 0x03];
+        }
     }
     // sprites
     if (ppu->lcdc & LCDC_OBJ_ENABLE) {
@@ -116,9 +124,13 @@ static INLINE void drawLine(Ppu* ppu) {
                 pathi = XFLIP_TABLE[pathi];
             }
             U8 x = ppu->objs[obj + 1] - OBJ_ORIGIN_X;
+            U8 z = (attr & OBJ_ATTR_PRIORITY) ? 0x7F : 0x80;
             for (U8 tilex = 0; tilex < TILE_WIDTH; ++tilex) {
                 U8 dot = x + tilex;
                 if (dot >= SCREEN_WIDTH) {
+                    continue;
+                }
+                if (z < zline[dot]) {
                     continue;
                 }
                 U8 bitlo = (patlo & (0x80 >> tilex)) != 0;
@@ -127,11 +139,51 @@ static INLINE void drawLine(Ppu* ppu) {
                 if (bits == 0) {
                     continue;
                 }
+                zline[dot] = z;
                 line[dot] =
                     DMG_PALETTE[(attr & OBJ_ATTR_DMG_PALETTE)
                                     ? ((ppu->obp1 >> (bits * 2)) & 0x03)
                                     : ((ppu->obp0 >> (bits * 2)) & 0x03)];
             }
+        }
+    }
+    // window
+    if (ppu->lcdc & LCDC_WIN_ENABLE) {
+        if (ppu->ly < ppu->wy) {
+            return;
+        }
+        U16       mapaddr = (ppu->lcdc & LCDC_WIN_MAP)
+                                ? (VRAM_BG_MAP1_ADDR - VRAM_START_ADDR)
+                                : (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR);
+        U8 const* idxs    = &ppu->vram[0][mapaddr];
+        // U8 const* attrs   = &ppu->vram[1][mapaddr];
+        U8        y       = ppu->ly + ppu->wy;
+        // Pixel y-offset into tile data (2 bytes per pixel)
+        U8        tiley   = 2 * (y % TILE_HEIGHT);
+        for (U8 dot = 0; dot < SCREEN_WIDTH; ++dot) {
+            if (dot < (ppu->wx - 7)) {
+                continue;
+            }
+            U8  x = dot + (ppu->wx - 7);
+            U16 mapidx =
+                (((U16)x) / TILE_WIDTH) + ((((U16)y) / TILE_HEIGHT) * 32);
+            U8  idx     = idxs[mapidx];
+            // U8   attr   = attrs[mapidx];
+            U16 tileoff = (ppu->lcdc & LCDC_TILES)
+                              ? (((U16)idx) * 16)
+                              : ((U16)(0x1000 + (((I16)((I8)idx)) * 16)));
+            U8  tilex   = x % TILE_WIDTH;
+            U8  patlo   = ppu->vram[0][tileoff + tiley + 0];
+            U8  pathi   = ppu->vram[0][tileoff + tiley + 1];
+            U8  bitlo   = (patlo & (0x80 >> tilex)) != 0;
+            U8  bithi   = (pathi & (0x80 >> tilex)) != 0;
+            U8  bits    = (bithi << 1) | bitlo;
+            U8  z       = 1 + ((bits) ? 0x80 : 0x7F); // window above bg
+            if (z < zline[dot]) {
+                continue;
+            }
+            zline[dot] = z;
+            line[dot]  = DMG_PALETTE[(ppu->bgp >> (bits * 2)) & 0x03];
         }
     }
 }

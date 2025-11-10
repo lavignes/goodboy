@@ -3,61 +3,9 @@
 #include <SDL2/SDL.h>
 
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef struct {
-    U8 rom[0x8000];
-} Mbc0State;
-
-U8 mbc0Read(Mbc0State* state, U16 addr) { return state->rom[addr]; }
-
-typedef struct {
-    U8 rom[0x80][0x4000];
-    U8 sram[4][0x2000];
-
-    U8   rombank;
-    U8   srambank;
-    Bool sramenable;
-} Mbc1State;
-
-U8 mbc1Read(Mbc1State* state, U16 addr) {
-    switch (addr) {
-    case ROM_BANK0_START_ADDR ... ROM_BANK0_END_ADDR:
-        return state->rom[0][addr - ROM_BANK0_START_ADDR];
-    case ROM_BANKX_START_ADDR ... ROM_BANKX_END_ADDR:
-        return state->rom[state->rombank][addr - ROM_BANKX_START_ADDR];
-    case SRAM_START_ADDR ... SRAM_END_ADDR:
-        return state->sram[state->srambank][addr - SRAM_START_ADDR];
-    default:
-        UNREACHABLE();
-    }
-}
-
-void mbc1Write(Mbc1State* state, U16 addr, U8 val) {
-    switch (addr) {
-    case 0x0000 ... 0x1FFF:
-        state->sramenable = ((val & 0x0F) == 0x0A);
-        return;
-    case 0x2000 ... 0x3FFF: {
-        U8 bank = val & 0x1F;
-        switch (bank) {
-        case 0x00:
-        case 0x20:
-        case 0x40:
-        case 0x60:
-            ++bank;
-            break;
-        default:
-            break;
-        }
-        state->rombank = bank; // TODO: wrap to actual rom size
-        return;
-    }
-    default:
-        UNREACHABLE();
-    }
-}
 
 typedef struct {
     UInt      ticks;
@@ -159,25 +107,44 @@ static void serialWrite(void* state, U16 addr, U8 val) {
 
 static void help(char const* name) {
     fprintf(stderr,
-            "Usage: %s [OPTIONS] [ROM]\n"
+            "usage: %s [OPTIONS] <ROM>\n"
             "\n"
-            "Arguments:\n"
-            "  [ROM]  Gameboy ROM file to load\n"
+            "arguments:\n"
+            "  <ROM>  gameboy ROM file to load\n"
             "\n"
-            "Options:\n"
-            "  -b, --skip-boot    Skip the boot ROM (Nintendo Logo)\n"
-            "  -h, --help         Show this help message and exit\n",
+            "options:\n"
+            "  -s, --scale N      scale the window by N (default: 4)\n"
+            "  -b, --skip-boot    skip the boot ROM (Nintendo logo)\n"
+            "  -h, --help         show this help message and exit\n",
             name);
 }
 
 int main(int argc, char* argv[]) {
+    if (argc == 1) {
+        help(argv[0]);
+        return EXIT_FAILURE;
+    }
     FILE* romfile  = NULL;
     Bool  skipboot = FALSE;
+    UInt  scale    = 4;
     for (int argi = 1; argi < argc; ++argi) {
         if ((strcmp(argv[argi], "-h") == 0) ||
             (strcmp(argv[argi], "--help") == 0)) {
             help(argv[0]);
             return EXIT_SUCCESS;
+        }
+        if ((strcmp(argv[argi], "-s") == 0) ||
+            (strcmp(argv[argi], "--scale") == 0)) {
+            if (argi + 1 >= argc) {
+                fprintf(stderr, "missing scale factor after %s\n", argv[argi]);
+                return EXIT_FAILURE;
+            }
+            scale = (UInt)strtoul(argv[++argi], NULL, 10);
+            if ((scale == ULONG_MAX) || (scale == 0) || (scale > 64)) {
+                fprintf(stderr, "invalid scale factor: %s\n", argv[argi]);
+                return EXIT_FAILURE;
+            }
+            continue;
         }
         if ((strcmp(argv[argi], "-b") == 0) ||
             (strcmp(argv[argi], "--skip-boot") == 0)) {
@@ -186,59 +153,48 @@ int main(int argc, char* argv[]) {
         }
         romfile = fopen(argv[argi], "rb");
         if (!romfile) {
-            fprintf(stderr, "Failed to open ROM file: %s\n", strerror(errno));
+            fprintf(stderr, "failed to open ROM file: %s\n", strerror(errno));
             return EXIT_FAILURE;
         }
     }
+    if (!romfile) {
+        fprintf(stderr, "no ROM file specified\n");
+        return EXIT_FAILURE;
+    }
     int exitcode = EXIT_FAILURE;
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
-        fprintf(stderr, "Failed to initialize subsystems: %s\n",
+        fprintf(stderr, "failed to initialize subsystems: %s\n",
                 SDL_GetError());
         goto cleanupSDL;
     }
     SDL_Window* win = SDL_CreateWindow(
         "goodboy", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        SCREEN_WIDTH * 4, SCREEN_HEIGHT * 4, SDL_WINDOW_ALLOW_HIGHDPI);
+        SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale, SDL_WINDOW_ALLOW_HIGHDPI);
     if (!win) {
-        fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
+        fprintf(stderr, "failed to create window: %s\n", SDL_GetError());
         goto cleanupSDL;
     }
     SDL_Renderer* renderer = SDL_CreateRenderer(
         win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
-        fprintf(stderr, "Failed to create renderer: %s\n", SDL_GetError());
+        fprintf(stderr, "failed to create renderer: %s\n", SDL_GetError());
         goto cleanupWindow;
     }
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
                                              SDL_TEXTUREACCESS_STREAMING,
                                              SCREEN_WIDTH, SCREEN_HEIGHT);
     if (!texture) {
-        fprintf(stderr, "Failed to create texture: %s\n", SDL_GetError());
+        fprintf(stderr, "failed to create texture: %s\n", SDL_GetError());
         goto cleanupRenderer;
-    }
-    Mbc0State mbcstate = {0};
-    if (romfile) {
-        if (fread(mbcstate.rom, 1, sizeof(mbcstate.rom), romfile) == 0) {
-            int err = ferror(romfile);
-            if (err) {
-                fprintf(stderr, "Failed to read ROM file: %s\n", strerror(err));
-                goto cleanupTexture;
-            }
-        }
-        if (fclose(romfile) == EOF) {
-            fprintf(stderr, "Failed to close ROM file: %s\n", strerror(errno));
-        }
     }
     InputState istate = {0};
     Bus        bus    = {0};
-
-    bus.cart = (Dev){
-        .state = &mbcstate,
-        .reset = DEV_NULL.reset,
-        .tick  = DEV_NULL.tick,
-        .read  = (DevReadFn)mbc0Read,
-        .write = DEV_NULL.write,
-    };
+    Int        err;
+    if ((err = cartInit(&bus.cart, romfile))) {
+        fprintf(stderr, "failed to init cart: %" VIEW_FMT "\n",
+                VIEW_FMT_ARG(cartErr(err)));
+        goto cleanupTexture;
+    }
     bus.input = (Dev){
         .state = &istate,
         .reset = (DevResetFn)inputReset,

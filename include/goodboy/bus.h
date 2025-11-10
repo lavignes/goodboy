@@ -1,6 +1,8 @@
 #ifndef GB_BUS_H
 #define GB_BUS_H
 
+#include <goodboy/apu.h>
+#include <goodboy/cart.h>
 #include <goodboy/cpu.h>
 #include <goodboy/fatal.h>
 #include <goodboy/ppu.h>
@@ -107,9 +109,9 @@ enum {
     ROM_BANKX_START_ADDR = 0x4000,
     ROM_BANKX_END_ADDR   = ROM_BANKX_START_ADDR + ROM_BANK_SIZE - 1,
 
-    SRAM_SIZE       = 0x2000,
-    SRAM_START_ADDR = 0xA000,
-    SRAM_END_ADDR   = SRAM_START_ADDR + SRAM_SIZE - 1,
+    CRAM_SIZE       = 0x2000,
+    CRAM_START_ADDR = 0xA000,
+    CRAM_END_ADDR   = CRAM_START_ADDR + CRAM_SIZE - 1,
 
     WRAM_BANK_SIZE        = 0x1000,
     WRAM_BANK0_START_ADDR = 0xC000,
@@ -149,30 +151,16 @@ enum {
     P1_MASK = P1_DPAD_MASK | P1_BUTTONS_MASK | P1_CTRL_MASK,
 };
 
-typedef void (*DevResetFn)(void*);
-typedef void (*DevTickFn)(void*);
-typedef U8 (*DevReadFn)(void*, U16);
-typedef void (*DevWriteFn)(void*, U16, U8);
-
-typedef struct {
-    void*      state;
-    DevResetFn reset;
-    DevTickFn  tick;
-    DevReadFn  read;
-    DevWriteFn write;
-} Dev;
-
-extern Dev const DEV_NULL;
-extern Dev const DEV_BOOT;
-
 struct Bus {
     Cpu cpu;
     Ppu ppu;
+    Apu apu;
     U8  wram[8][WRAM_BANK_SIZE];
     U8  hram[HRAM_SIZE];
 
+    Cart cart;
+
     Dev mbc;
-    Dev cart;
     Dev input;
     Dev serial;
 
@@ -201,7 +189,7 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
         return bus->mbc.read(bus->mbc.state, addr);
     case VRAM_START_ADDR ... VRAM_END_ADDR:
         return bus->ppu.vram[bus->ppu.vbk & 0x01][addr - VRAM_START_ADDR];
-    case SRAM_START_ADDR ... SRAM_END_ADDR:
+    case CRAM_START_ADDR ... CRAM_END_ADDR:
         return bus->mbc.read(bus->mbc.state, addr);
     case WRAM_BANK0_START_ADDR ... WRAM_BANK0_END_ADDR:
         return bus->wram[0][addr - WRAM_BANK0_START_ADDR];
@@ -317,7 +305,7 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case VRAM_START_ADDR ... VRAM_END_ADDR:
         bus->ppu.vram[bus->ppu.vbk & 0x01][addr - VRAM_START_ADDR] = val;
         return;
-    case SRAM_START_ADDR ... SRAM_END_ADDR:
+    case CRAM_START_ADDR ... CRAM_END_ADDR:
         bus->mbc.write(bus->mbc.state, addr, val);
         return;
     case WRAM_BANK0_START_ADDR ... WRAM_BANK0_END_ADDR:
@@ -427,7 +415,7 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
         bus->ppu.vbk = val;
         return;
     case PORT_BOOT:
-        bus->mbc = bus->cart;
+        bus->mbc = bus->cart.mbc;
         return;
     case PORT_HDMA1:
     case PORT_HDMA2:
