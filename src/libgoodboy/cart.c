@@ -158,27 +158,27 @@ static void mbc1Write(Mbc1* mbc1, U16 addr, U8 val) {
     switch (addr) {
     case 0x0000 ... 0x1FFF:
         mbc1->ramenabled = (val & 0x0F) == 0x0A;
-        break;
+        return;
     case 0x2000 ... 0x3FFF:
         mbc1->loaddr = val & 0x1F;
         mbc1Logic(mbc1);
-        break;
+        return;
     case 0x4000 ... 0x5FFF:
         mbc1->hiaddr = val & 0x03;
         mbc1Logic(mbc1);
-        break;
+        return;
     case 0x6000 ... 0x7FFF:
         mbc1->mode = val & 0x01;
         mbc1Logic(mbc1);
-        break;
+        return;
     case CRAM_START_ADDR ... CRAM_END_ADDR:
         if (!mbc1->ramenabled) {
-            break;
+            return;
         }
         mbc1->ram.view
             .bytes[(mbc1->rambase + addr - CRAM_START_ADDR) & mbc1->rammask] =
             val;
-        break;
+        return;
     default:
         UNREACHABLE();
     }
@@ -325,6 +325,7 @@ void cartFini(Cart* cart) {
     default:
         TODO();
     }
+    memset(cart, 0, sizeof(Cart));
 }
 
 View cartErr(Int err) {
