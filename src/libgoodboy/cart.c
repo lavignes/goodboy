@@ -35,10 +35,10 @@ static struct {
 };
 
 enum {
-    CART_TITLE_OFFSET   = 0x0134,
-    CART_TYPE_OFFSET    = 0x0147,
-    CART_ROMSIZE_OFFSET = 0x0148,
-    CART_RAMSIZE_OFFSET = 0x0149,
+    OFFSET_TITLE    = 0x0134,
+    OFFSET_TYPE     = 0x0147,
+    OFFSET_ROM_SIZE = 0x0148,
+    OFFSET_RAM_SIZE = 0x0149,
 };
 
 static struct {
@@ -61,13 +61,13 @@ static struct {
     {RAM_SIZE_64KB, 64 * 1024},
 };
 
-static INLINE View typeName(U8 type) {
+static INLINE View const* typeName(U8 type) {
     for (UInt i = 0; i < sizeof(TYPES) / sizeof(TYPES[0]); ++i) {
         if (TYPES[i].type == type) {
-            return TYPES[i].view;
+            return &TYPES[i].view;
         }
     }
-    return VIEW_NULL;
+    return NULL;
 }
 
 static INLINE UInt const* romSize(U8 romsize) {
@@ -94,8 +94,8 @@ static U8   mbc0Read(U8 rom[], U16 addr) { return rom[addr]; }
 typedef struct {
     Buf  rom;
     Buf  ram;
-    U8   loreg;
-    U8   hireg;
+    U8   loaddr;
+    U8   hiaddr;
     U32  rom0base;
     U32  romXbase;
     U32  rommask;
@@ -112,22 +112,23 @@ static void mbc1Fini(Mbc1* mbc1) {
 }
 
 static INLINE void mbc1Logic(Mbc1* mbc1) {
-    if (mbc1->loreg == 0) {
-        mbc1->loreg = 1;
+    if (mbc1->loaddr == 0) {
+        mbc1->loaddr = 1;
     }
-    mbc1->romXbase = ((mbc1->hireg << 19) | (mbc1->loreg << 14)) - ROM_BANKX_START_ADDR;
+    mbc1->romXbase =
+        ((mbc1->hiaddr << 19) | (mbc1->loaddr << 14)) - ROM_BANKX_START_ADDR;
     if (mbc1->mode == 0) {
         mbc1->rom0base = 0;
         mbc1->rambase  = 0;
         return;
     }
-    mbc1->rom0base = mbc1->hireg << 19;
-    mbc1->rambase  = mbc1->hireg << 13;
+    mbc1->rom0base = mbc1->hiaddr << 19;
+    mbc1->rambase  = mbc1->hiaddr << 13;
 }
 
 static void mbc1Reset(Mbc1* mbc1) {
-    mbc1->loreg      = 0;
-    mbc1->hireg      = 0;
+    mbc1->loaddr     = 0;
+    mbc1->hiaddr     = 0;
     mbc1->rom0base   = 0;
     mbc1->romXbase   = 0;
     mbc1->rambase    = 0;
@@ -159,11 +160,11 @@ static void mbc1Write(Mbc1* mbc1, U16 addr, U8 val) {
         mbc1->ramenabled = (val & 0x0F) == 0x0A;
         break;
     case 0x2000 ... 0x3FFF:
-        mbc1->loreg = val & 0x1F;
+        mbc1->loaddr = val & 0x1F;
         mbc1Logic(mbc1);
         break;
     case 0x4000 ... 0x5FFF:
-        mbc1->hireg = val & 0x03;
+        mbc1->hiaddr = val & 0x03;
         mbc1Logic(mbc1);
         break;
     case 0x6000 ... 0x7FFF:
@@ -221,7 +222,7 @@ Int cartInit(Cart* cart, FILE* romfile) {
         err = CART_ERR_IO;
         goto closeFile;
     }
-    memcpy(cart->title, rom + CART_TITLE_OFFSET, sizeof(cart->title));
+    memcpy(cart->title, rom + OFFSET_TITLE, sizeof(cart->title));
     for (UInt i = 0; i < sizeof(cart->title); ++i) {
         if (cart->title[i] == 0) {
             cart->title[i] = ' ';
@@ -229,30 +230,28 @@ Int cartInit(Cart* cart, FILE* romfile) {
     }
     debug("title: %" VIEW_FMT "\n", VIEW_FMT_ARG(VIEW(cart->title)));
 
-    cart->type = rom[CART_TYPE_OFFSET];
-    View type  = cartType(cart->type);
-    if (viewEquals(type, VIEW_NULL)) {
+    cart->type       = rom[OFFSET_TYPE];
+    View const* type = typeName(cart->type);
+    if (!type) {
         debug("unsupported cartridge type: %02" U8_FMTX "\n", cart->type);
         free(rom);
         err = CART_ERR_BAD_HEADER;
         goto closeFile;
     }
-    debug("type: %" VIEW_FMT "\n", VIEW_FMT_ARG(type));
+    debug("type: %" VIEW_FMT "\n", VIEW_FMT_ARG(*type));
 
-    cart->romsize       = rom[CART_ROMSIZE_OFFSET];
-    UInt const* romsize = romSize(cart->romsize);
+    UInt const* romsize = romSize(rom[OFFSET_ROM_SIZE]);
     if (!romsize) {
-        debug("invalid ROM size: %02" U8_FMTX "\n", cart->romsize);
+        debug("invalid ROM size: %02" U8_FMTX "\n", rom[OFFSET_ROM_SIZE]);
         free(rom);
         err = CART_ERR_BAD_HEADER;
         goto closeFile;
     }
     debug("rom size: %" UINT_FMT " bytes\n", *romsize);
 
-    cart->ramsize       = rom[CART_RAMSIZE_OFFSET];
-    UInt const* ramsize = ramSize(cart->ramsize);
+    UInt const* ramsize = ramSize(rom[OFFSET_RAM_SIZE]);
     if (!ramsize) {
-        debug("invalid RAM size: %02" U8_FMTX "\n", cart->ramsize);
+        debug("invalid RAM size: %02" U8_FMTX "\n", rom[OFFSET_RAM_SIZE]);
         free(rom);
         err = CART_ERR_BAD_HEADER;
         goto closeFile;
@@ -334,5 +333,3 @@ View cartErr(Int err) {
     }
     return ERRS[err];
 }
-
-View cartType(U8 type) { return typeName(type); }

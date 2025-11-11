@@ -55,15 +55,11 @@ enum {
 typedef struct {
     U8  title[16];
     U8  type;
-    U8  romsize;
-    U8  ramsize;
     Dev mbc;
 } Cart;
 
 Int  cartInit(Cart* cart, FILE* romfile);
 void cartFini(Cart* cart);
 View cartErr(Int err);
-
-View cartType(U8 type);
 
 #endif // GB_CART_H
