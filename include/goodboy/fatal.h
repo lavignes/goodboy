@@ -28,14 +28,14 @@
 #define UNREACHABLE()                                                          \
     do {                                                                       \
         fatal("%s:%d: unreachable\n", __FILE__, __LINE__);                     \
-    } while (0)
+    } while (1)
 #endif
 
 #define TODO(fmt, ...)                                                         \
     do {                                                                       \
         fatal("%s:%d: not implemented" fmt, __FILE__, __LINE__,                \
               ##__VA_ARGS__);                                                  \
-    } while (0)
+    } while (1)
 
 NORETURN void fatalV(char const* fmt, va_list args);
 FORMAT(1) NORETURN void fatal(char const* fmt, ...);

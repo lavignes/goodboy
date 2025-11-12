@@ -157,7 +157,7 @@ static INLINE void drawLine(Ppu* ppu) {
                                 : (VRAM_BG_MAP0_ADDR - VRAM_START_ADDR);
         U8 const* idxs    = &ppu->vram[0][mapaddr];
         // U8 const* attrs   = &ppu->vram[1][mapaddr];
-        U8        y       = ppu->ly + ppu->wy;
+        U8        y       = ppu->ly - ppu->wy;
         // Pixel y-offset into tile data (2 bytes per pixel)
         U8        tiley   = 2 * (y % TILE_HEIGHT);
         for (U8 dot = 0; dot < SCREEN_WIDTH; ++dot) {
