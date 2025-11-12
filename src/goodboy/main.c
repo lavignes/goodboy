@@ -114,7 +114,7 @@ static void help(char const* name) {
             "\n"
             "options:\n"
             "  -s, --scale N      scale the window by N (default: 4)\n"
-            "  -b, --skip-boot    skip the boot ROM (Nintendo logo)\n"
+            "  -f, --fast-boot    skip the boot ROM (Nintendo logo)\n"
             "  -h, --help         show this help message and exit\n",
             name);
 }
@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     FILE* romfile  = NULL;
-    Bool  skipboot = FALSE;
+    Bool  fastboot = FALSE;
     UInt  scale    = 4;
     for (int argi = 1; argi < argc; ++argi) {
         if ((strcmp(argv[argi], "-h") == 0) ||
@@ -135,20 +135,21 @@ int main(int argc, char* argv[]) {
         }
         if ((strcmp(argv[argi], "-s") == 0) ||
             (strcmp(argv[argi], "--scale") == 0)) {
-            if (argi + 1 >= argc) {
-                fprintf(stderr, "missing scale factor after %s\n", argv[argi]);
+            ++argi;
+            if (argi >= argc) {
+                fprintf(stderr, "missing scale factor\n");
                 return EXIT_FAILURE;
             }
-            scale = (UInt)strtoul(argv[++argi], NULL, 10);
+            scale = (UInt)strtoul(argv[argi], NULL, 10);
             if ((scale == ULONG_MAX) || (scale == 0) || (scale > 64)) {
                 fprintf(stderr, "invalid scale factor: %s\n", argv[argi]);
                 return EXIT_FAILURE;
             }
             continue;
         }
-        if ((strcmp(argv[argi], "-b") == 0) ||
-            (strcmp(argv[argi], "--skip-boot") == 0)) {
-            skipboot = TRUE;
+        if ((strcmp(argv[argi], "-f") == 0) ||
+            (strcmp(argv[argi], "--fast-boot") == 0)) {
+            fastboot = TRUE;
             continue;
         }
         romfile = fopen(argv[argi], "rb");
@@ -210,7 +211,7 @@ int main(int argc, char* argv[]) {
         .write = serialWrite,
     };
     busReset(&bus);
-    if (skipboot) {
+    if (fastboot) {
         busWrite(&bus, PORT_BOOT, 0x01);
         bus.cpu.af.h = 0x01;
         bus.cpu.af.l = 0xB0;
