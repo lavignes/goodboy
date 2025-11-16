@@ -4,8 +4,6 @@
 #include <goodboy/buf.h>
 #include <goodboy/dev.h>
 
-#include <stdio.h>
-
 enum {
     CART_TYPE_MBC0                 = 0x00,
     CART_TYPE_MBC1                 = 0x01,
@@ -13,8 +11,8 @@ enum {
     CART_TYPE_MBC1_RAM_BATT        = 0x03,
     CART_TYPE_MBC2                 = 0x05,
     CART_TYPE_MBC2_BATT            = 0x06,
-    CART_TYPE_MBC3_TIMER_BATT      = 0x0F,
-    CART_TYPE_MBC3_TIMER_RAM_BATT  = 0x10,
+    CART_TYPE_MBC3_RTC_BATT        = 0x0F,
+    CART_TYPE_MBC3_RTC_RAM_BATT    = 0x10,
     CART_TYPE_MBC3                 = 0x11,
     CART_TYPE_MBC3_RAM             = 0x12,
     CART_TYPE_MBC3_RAM_BATT        = 0x13,
@@ -58,7 +56,7 @@ typedef struct {
     Dev mbc;
 } Cart;
 
-Int  cartInit(Cart* cart, FILE* romfile);
+Int  cartInit(Cart* cart, char const* rompath);
 void cartFini(Cart* cart);
 View cartErr(Int err);
 

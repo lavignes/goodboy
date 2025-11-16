@@ -16,5 +16,5 @@ void bufFini(Buf* buf) {
     if (buf->view.bytes) {
         free(buf->view.bytes);
     }
-    memset(buf, 0, sizeof(Buf));
+    memset(buf, 0, sizeof(*buf));
 }

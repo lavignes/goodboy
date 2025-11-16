@@ -8,7 +8,7 @@
 STATIC_ASSERT(offsetof(Reg, l) == 0, "Reg.l offset must be 0");
 STATIC_ASSERT(offsetof(Reg, h) == 1, "Reg.h offset must be 1");
 
-void cpuReset(Cpu* cpu) { memset(cpu, 0, sizeof(Cpu)); }
+void cpuReset(Cpu* cpu) { memset(cpu, 0, sizeof(*cpu)); }
 
 static INLINE UInt push(Cpu* cpu, Bus* bus, U16 val) {
     busWrite(bus, --cpu->sp, val >> 8);

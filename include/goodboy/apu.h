@@ -7,15 +7,20 @@ typedef struct Bus Bus;
 typedef struct Apu Apu;
 
 typedef struct {
-    Bool enabled;
-    U16  freq;
-    UInt period;
-    UInt timer;
-    U8   duty;
-} Ch1;
+    F32 amp;
+} Ch;
 
 struct Apu {
-    Ch1 ch1;
+    Ch ch1;
+    Ch ch2;
+    Ch ch3;
+    Ch ch4;
+
+    F32  buf[1024];
+    UInt bufpos;
 };
+
+void apuReset(Apu* apu);
+void apuTick(Apu* apu, Bus* bus);
 
 #endif // GB_APU_H

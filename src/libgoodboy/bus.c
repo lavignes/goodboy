@@ -14,6 +14,7 @@ UInt busTick(Bus* bus) {
     UInt cycles   = cpuTick(&bus->cpu, bus);
     bus->vblanked = FALSE;
     for (UInt i = 0; i < cycles; ++i) {
+        apuTick(&bus->apu, bus);
         bus->vblanked |= ppuTick(&bus->ppu, bus);
         bus->mbc.tick(bus->mbc.state);
         bus->input.tick(bus->input.state);

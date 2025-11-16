@@ -21,8 +21,8 @@ static struct {
     {CART_TYPE_MBC1_RAM_BATT, VIEW("MBC1 + RAM + Battery")},
     {CART_TYPE_MBC2, VIEW("MBC2")},
     {CART_TYPE_MBC2_BATT, VIEW("MBC2 + Battery")},
-    {CART_TYPE_MBC3_TIMER_BATT, VIEW("MBC3 + Timer + Battery")},
-    {CART_TYPE_MBC3_TIMER_RAM_BATT, VIEW("MBC3 + Timer + RAM + Battery")},
+    {CART_TYPE_MBC3_RTC_BATT, VIEW("MBC3 + RTC + Battery")},
+    {CART_TYPE_MBC3_RTC_RAM_BATT, VIEW("MBC3 + RTC + RAM + Battery")},
     {CART_TYPE_MBC3, VIEW("MBC3")},
     {CART_TYPE_MBC3_RAM, VIEW("MBC3 + RAM")},
     {CART_TYPE_MBC3_RAM_BATT, VIEW("MBC3 + RAM + Battery")},
@@ -184,8 +184,13 @@ static void mbc1Write(Mbc1* mbc1, U16 addr, U8 val) {
     }
 }
 
-Int cartInit(Cart* cart, FILE* romfile) {
-    Int err = CART_OK;
+Int cartInit(Cart* cart, char const* rompath) {
+    Int   err     = CART_OK;
+    FILE* romfile = fopen(rompath, "rb");
+    if (!romfile) {
+        debug("failed to open ROM file: %s\n", strerror(errno));
+        return CART_ERR_IO;
+    }
     if (fseek(romfile, 0, SEEK_END)) {
         debug("failed to seek ROM file: %s\n", strerror(errno));
         err = CART_ERR_IO;
@@ -263,6 +268,22 @@ Int cartInit(Cart* cart, FILE* romfile) {
         if (!ram) {
             fatal("out of memory\n");
         }
+        FILE* ramfile = NULL;
+        char* rampath = malloc(strlen(rompath) + strlen(".sav") + 1);
+        if (!rampath) {
+            fatal("out of memory\n");
+        }
+        sprintf(rampath, "%s.sav", rompath);
+        ramfile = fopen(rampath, "rb");
+        if (ramfile) {
+            if (fread(ram, 1, *ramsize, ramfile) != *ramsize) {
+                debug("failed to read SAV file: %s\n", strerror(errno));
+            }
+            if (fclose(ramfile) == EOF) {
+                fatal("failed to close SAV file: %s\n", strerror(errno));
+            }
+        }
+        free(rampath);
     }
 
     switch (cart->type) {
@@ -306,8 +327,7 @@ Int cartInit(Cart* cart, FILE* romfile) {
 
 closeFile:
     if (fclose(romfile) == EOF) {
-        debug("failed to close ROM file: %s\n", strerror(errno));
-        err = CART_ERR_IO;
+        fatal("failed to close ROM file: %s\n", strerror(errno));
     }
     return err;
 }
@@ -325,7 +345,7 @@ void cartFini(Cart* cart) {
     default:
         TODO();
     }
-    memset(cart, 0, sizeof(Cart));
+    memset(cart, 0, sizeof(*cart));
 }
 
 View cartErr(Int err) {

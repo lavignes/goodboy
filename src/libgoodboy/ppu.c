@@ -60,7 +60,7 @@ static U32 const DMG_PALETTE[] = {
     0x000000FF,
 };
 
-void ppuReset(Ppu* ppu) { memset(ppu, 0, sizeof(Ppu)); }
+void ppuReset(Ppu* ppu) { memset(ppu, 0, sizeof(*ppu)); }
 
 static INLINE void drawLine(Ppu* ppu) {
     U32* line  = ppu->pixels[ppu->ly];

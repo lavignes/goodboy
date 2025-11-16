@@ -72,10 +72,10 @@ static void inputWrite(InputState* state, U16 addr, U8 val) {
         if (!(val & P1_CTRL_BUTTONS)) {
             state->p1 |= P1_BUTTONS_MASK;
             if (state->keys[SDL_SCANCODE_Z]) {
-                state->p1 &= ~P1_A;
+                state->p1 &= ~P1_B;
             }
             if (state->keys[SDL_SCANCODE_X]) {
-                state->p1 &= ~P1_B;
+                state->p1 &= ~P1_A;
             }
             if (state->keys[SDL_SCANCODE_RSHIFT]) {
                 state->p1 &= ~P1_SELECT;
@@ -124,9 +124,9 @@ int main(int argc, char* argv[]) {
         help(argv[0]);
         return EXIT_FAILURE;
     }
-    FILE* romfile  = NULL;
-    Bool  fastboot = FALSE;
-    UInt  scale    = 4;
+    char const* rompath  = NULL;
+    Bool        fastboot = FALSE;
+    UInt        scale    = 4;
     for (int argi = 1; argi < argc; ++argi) {
         if ((strcmp(argv[argi], "-h") == 0) ||
             (strcmp(argv[argi], "--help") == 0)) {
@@ -152,13 +152,17 @@ int main(int argc, char* argv[]) {
             fastboot = TRUE;
             continue;
         }
-        romfile = fopen(argv[argi], "rb");
+        rompath       = argv[argi];
+        FILE* romfile = fopen(argv[argi], "rb");
         if (!romfile) {
             fprintf(stderr, "failed to open ROM file: %s\n", strerror(errno));
             return EXIT_FAILURE;
         }
+        if (fclose(romfile) == EOF) {
+            fatal("failed to close ROM file: %s\n", strerror(errno));
+        }
     }
-    if (!romfile) {
+    if (!rompath) {
         fprintf(stderr, "no ROM file specified\n");
         return EXIT_FAILURE;
     }
@@ -188,10 +192,24 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "failed to create texture: %s\n", SDL_GetError());
         goto cleanupRenderer;
     }
+    SDL_AudioSpec auspec = {
+        .freq     = 44100,
+        .format   = AUDIO_F32SYS,
+        .channels = 2,
+        .samples  = 1024,
+
+    };
+    SDL_AudioDeviceID audev = SDL_OpenAudioDevice(NULL, 0, &auspec, NULL, 0);
+    if (audev == 0) {
+        fprintf(stderr, "failed to open audio device: %s\n", SDL_GetError());
+        goto cleanupTexture;
+    }
+    SDL_PauseAudioDevice(audev, 0);
+    F32        aubuf[1024 * 2];
     InputState istate = {0};
     Bus        bus    = {0};
     Int        err;
-    if ((err = cartInit(&bus.cart, romfile))) {
+    if ((err = cartInit(&bus.cart, rompath))) {
         fprintf(stderr, "failed to init cart: %" VIEW_FMT "\n",
                 VIEW_FMT_ARG(cartErr(err)));
         goto cleanupTexture;
@@ -227,8 +245,15 @@ int main(int argc, char* argv[]) {
     UInt fps    = 0;
     UInt cycles = 0;
     U64  last   = SDL_GetTicks64();
+    UInt aupos  = 0;
     while (!istate.quit) {
         cycles += busTick(&bus);
+        aubuf[aupos++] = bus.apu.ch1.amp;
+        aubuf[aupos++] = bus.apu.ch1.amp;
+        if (aupos >= 1024) {
+            SDL_QueueAudio(audev, aubuf, sizeof(aubuf));
+            aupos = 0;
+        }
         if (bus.vblanked) {
             void* pixels;
             int   pitch;
