@@ -2,6 +2,7 @@
 
 void busReset(Bus* bus) {
     cpuReset(&bus->cpu);
+    apuReset(&bus->apu);
     ppuReset(&bus->ppu);
     bus->mbc       = DEV_BOOT;
     bus->mbc.state = &bus->cart.mbc;
@@ -13,21 +14,17 @@ void busReset(Bus* bus) {
 UInt busTick(Bus* bus) {
     UInt cycles = cpuTick(&bus->cpu, bus);
     for (UInt i = 0; i < cycles; ++i) {
-        if (apuTick(&bus->apu, bus)) {
-            if (bus->apuCb) {
-                bus->apuCb(bus, bus->apuCbState);
-            }
+        ++bus->divcnt;
+        if (apuTick(&bus->apu, bus) && bus->apucb) {
+            bus->apucb(bus);
         }
-        if (ppuTick(&bus->ppu, bus)) {
-            if (bus->ppuCb) {
-                bus->ppuCb(bus, bus->ppuCbState);
-            }
+        if (ppuTick(&bus->ppu, bus) && bus->ppucb) {
+            bus->ppucb(bus);
         }
         bus->mbc.tick(bus->mbc.state);
         bus->input.tick(bus->input.state);
         bus->serial.tick(bus->serial.state);
     }
-    bus->divcnt += cycles;
     // TODO: CGB timer speed doubling
     if (bus->divcnt >= (CPU_FREQ_NORMAL / DIV_FREQ)) {
         bus->divcnt -= (CPU_FREQ_NORMAL / DIV_FREQ);
