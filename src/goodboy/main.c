@@ -220,7 +220,6 @@ int main(int argc, char* argv[]) {
         .format   = AUDIO_F32SYS,
         .channels = 2,
         .samples  = APU_BUF_SIZE / 2,
-
     };
     audev = SDL_OpenAudioDevice(NULL, 0, &auspec, NULL, 0);
     if (audev == 0) {
@@ -285,7 +284,6 @@ int main(int argc, char* argv[]) {
             last   = now;
         }
     }
-
     exitcode = EXIT_SUCCESS;
 cleanupTexture:
     SDL_DestroyTexture(texture);
