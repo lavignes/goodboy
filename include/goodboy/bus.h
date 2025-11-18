@@ -126,6 +126,10 @@ enum {
     ECHO_BANKX_START_ADDR = 0xF000,
     ECHO_BANKX_END_ADDR   = ECHO_BANKX_START_ADDR + ECHO_BANKX_SIZE - 1,
 
+    WAVRAM_SIZE       = 0x0010,
+    WAVRAM_START_ADDR = 0xFF30,
+    WAVRAM_END_ADDR   = WAVRAM_START_ADDR + WAVRAM_SIZE - 1,
+
     HRAM_SIZE       = 0x007F,
     HRAM_START_ADDR = 0xFF80,
     HRAM_END_ADDR   = HRAM_START_ADDR + HRAM_SIZE - 1,
@@ -151,12 +155,21 @@ enum {
     P1_MASK = P1_DPAD_MASK | P1_BUTTONS_MASK | P1_CTRL_MASK,
 };
 
+typedef void (*PpuCallback)(Bus* bus, void* state);
+typedef void (*ApuCallback)(Bus* bus, void* state);
+
 struct Bus {
     Cpu cpu;
     Ppu ppu;
     Apu apu;
     U8  wram[8][WRAM_BANK_SIZE];
     U8  hram[HRAM_SIZE];
+    U8  wavram[WAVRAM_SIZE];
+
+    PpuCallback ppuCb;
+    void*       ppuCbState;
+    ApuCallback apuCb;
+    void*       apuCbState;
 
     Cart cart;
 
@@ -164,8 +177,7 @@ struct Bus {
     Dev input;
     Dev serial;
 
-    Bool vblanked;
-    UInt divcnt;
+    UInt divcnt; // TODO: types?
     UInt timacnt;
 
     U8 div;
@@ -243,7 +255,9 @@ static INLINE U8 busRead(Bus* bus, U16 addr) {
     case PORT_NR50:
     case PORT_NR51:
     case PORT_NR52:
-        return 0xFF;
+        return apuRead(&bus->apu, addr);
+    case WAVRAM_START_ADDR ... WAVRAM_END_ADDR:
+        return bus->wavram[addr - WAVRAM_START_ADDR];
     case PORT_LCDC:
         return bus->ppu.lcdc;
     case PORT_STAT:
@@ -369,6 +383,10 @@ static INLINE void busWrite(Bus* bus, U16 addr, U8 val) {
     case PORT_NR50:
     case PORT_NR51:
     case PORT_NR52:
+        apuWrite(&bus->apu, addr, val);
+        return;
+    case WAVRAM_START_ADDR ... WAVRAM_END_ADDR:
+        bus->wavram[addr - WAVRAM_START_ADDR] = val;
         return;
     case PORT_LCDC:
         bus->ppu.lcdc = val;

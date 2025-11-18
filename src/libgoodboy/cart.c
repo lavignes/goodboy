@@ -2,6 +2,7 @@
 #include <goodboy/cart.h>
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -349,8 +350,10 @@ void cartFini(Cart* cart) {
 }
 
 View cartErr(Int err) {
-    if (err < 0 || (size_t)err >= sizeof(ERRS) / sizeof(ERRS[0])) {
-        return VIEW("unknown error");
+    for (UInt i = 0; i < sizeof(ERRS) / sizeof(ERRS[0]); ++i) {
+        if (err == (Int)i) {
+            return ERRS[i];
+        }
     }
-    return ERRS[err];
+    return VIEW("unknown error");
 }

@@ -11,11 +11,18 @@ void busReset(Bus* bus) {
 }
 
 UInt busTick(Bus* bus) {
-    UInt cycles   = cpuTick(&bus->cpu, bus);
-    bus->vblanked = FALSE;
+    UInt cycles = cpuTick(&bus->cpu, bus);
     for (UInt i = 0; i < cycles; ++i) {
-        apuTick(&bus->apu, bus);
-        bus->vblanked |= ppuTick(&bus->ppu, bus);
+        if (apuTick(&bus->apu, bus)) {
+            if (bus->apuCb) {
+                bus->apuCb(bus, bus->apuCbState);
+            }
+        }
+        if (ppuTick(&bus->ppu, bus)) {
+            if (bus->ppuCb) {
+                bus->ppuCb(bus, bus->ppuCbState);
+            }
+        }
         bus->mbc.tick(bus->mbc.state);
         bus->input.tick(bus->input.state);
         bus->serial.tick(bus->serial.state);

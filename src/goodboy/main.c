@@ -119,6 +119,29 @@ static void help(char const* name) {
             name);
 }
 
+SDL_Renderer*     renderer;
+SDL_Texture*      texture;
+SDL_AudioDeviceID audev;
+UInt              fps;
+
+static void ppuCallback(Bus* bus, void* state) {
+    (void)state;
+    void* pixels;
+    int   pitch;
+    SDL_LockTexture(texture, NULL, &pixels, &pitch);
+    memcpy(pixels, bus->ppu.pixels, sizeof(bus->ppu.pixels));
+    SDL_UnlockTexture(texture);
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_RenderPresent(renderer);
+    ++fps;
+}
+
+static void apuCallback(Bus* bus, void* state) {
+    (void)state;
+    SDL_QueueAudio(audev, bus->apu.buf, sizeof(bus->apu.buf));
+}
+
 int main(int argc, char* argv[]) {
     if (argc == 1) {
         help(argv[0]);
@@ -179,33 +202,32 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "failed to create window: %s\n", SDL_GetError());
         goto cleanupSDL;
     }
-    SDL_Renderer* renderer = SDL_CreateRenderer(
+    renderer = SDL_CreateRenderer(
         win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
         fprintf(stderr, "failed to create renderer: %s\n", SDL_GetError());
         goto cleanupWindow;
     }
-    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                                             SDL_TEXTUREACCESS_STREAMING,
-                                             SCREEN_WIDTH, SCREEN_HEIGHT);
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH,
+                                SCREEN_HEIGHT);
     if (!texture) {
         fprintf(stderr, "failed to create texture: %s\n", SDL_GetError());
         goto cleanupRenderer;
     }
     SDL_AudioSpec auspec = {
-        .freq     = 44100,
+        .freq     = APU_SAMPLE_FREQ,
         .format   = AUDIO_F32SYS,
         .channels = 2,
-        .samples  = 1024,
+        .samples  = APU_BUF_SIZE / 2,
 
     };
-    SDL_AudioDeviceID audev = SDL_OpenAudioDevice(NULL, 0, &auspec, NULL, 0);
+    audev = SDL_OpenAudioDevice(NULL, 0, &auspec, NULL, 0);
     if (audev == 0) {
         fprintf(stderr, "failed to open audio device: %s\n", SDL_GetError());
         goto cleanupTexture;
     }
     SDL_PauseAudioDevice(audev, 0);
-    F32        aubuf[1024 * 2];
     InputState istate = {0};
     Bus        bus    = {0};
     Int        err;
@@ -214,6 +236,8 @@ int main(int argc, char* argv[]) {
                 VIEW_FMT_ARG(cartErr(err)));
         goto cleanupTexture;
     }
+    bus.ppuCb = ppuCallback;
+    bus.apuCb = apuCallback;
     bus.input = (Dev){
         .state = &istate,
         .reset = (DevResetFn)inputReset,
@@ -242,29 +266,11 @@ int main(int argc, char* argv[]) {
         bus.cpu.sp   = 0xFFFE;
         bus.cpu.pc   = 0x0100;
     }
-    UInt fps    = 0;
+    fps         = 0;
     UInt cycles = 0;
     U64  last   = SDL_GetTicks64();
-    UInt aupos  = 0;
     while (!istate.quit) {
         cycles += busTick(&bus);
-        aubuf[aupos++] = bus.apu.ch1.amp;
-        aubuf[aupos++] = bus.apu.ch1.amp;
-        if (aupos >= 1024) {
-            SDL_QueueAudio(audev, aubuf, sizeof(aubuf));
-            aupos = 0;
-        }
-        if (bus.vblanked) {
-            void* pixels;
-            int   pitch;
-            SDL_LockTexture(texture, NULL, &pixels, &pitch);
-            memcpy(pixels, bus.ppu.pixels, sizeof(bus.ppu.pixels));
-            SDL_UnlockTexture(texture);
-            SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
-            SDL_RenderPresent(renderer);
-            ++fps;
-        }
         U64 now = SDL_GetTicks64();
         if ((now - last) >= 1000) {
             F64  mhz = ((F64)cycles) / 1000000.0;
