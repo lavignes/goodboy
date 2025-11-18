@@ -155,8 +155,7 @@ enum {
     P1_MASK = P1_DPAD_MASK | P1_BUTTONS_MASK | P1_CTRL_MASK,
 };
 
-typedef void (*PpuCallback)(Bus* bus, void* state);
-typedef void (*ApuCallback)(Bus* bus, void* state);
+typedef void (*BusCallback)(Bus* bus);
 
 struct Bus {
     Cpu cpu;
@@ -166,10 +165,9 @@ struct Bus {
     U8  hram[HRAM_SIZE];
     U8  wavram[WAVRAM_SIZE];
 
-    PpuCallback ppuCb;
-    void*       ppuCbState;
-    ApuCallback apuCb;
-    void*       apuCbState;
+    BusCallback ppucb;
+    BusCallback apucb;
+    void *userdata;
 
     Cart cart;
 
