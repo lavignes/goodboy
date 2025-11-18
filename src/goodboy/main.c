@@ -124,8 +124,7 @@ SDL_Texture*      texture;
 SDL_AudioDeviceID audev;
 UInt              fps;
 
-static void ppuCallback(Bus* bus, void* state) {
-    (void)state;
+static void ppuCallback(Bus* bus) {
     void* pixels;
     int   pitch;
     SDL_LockTexture(texture, NULL, &pixels, &pitch);
@@ -137,8 +136,7 @@ static void ppuCallback(Bus* bus, void* state) {
     ++fps;
 }
 
-static void apuCallback(Bus* bus, void* state) {
-    (void)state;
+static void apuCallback(Bus* bus) {
     SDL_QueueAudio(audev, bus->apu.buf, sizeof(bus->apu.buf));
 }
 
@@ -235,8 +233,8 @@ int main(int argc, char* argv[]) {
                 VIEW_FMT_ARG(cartErr(err)));
         goto cleanupTexture;
     }
-    bus.ppuCb = ppuCallback;
-    bus.apuCb = apuCallback;
+    bus.ppucb = ppuCallback;
+    bus.apucb = apuCallback;
     bus.input = (Dev){
         .state = &istate,
         .reset = (DevResetFn)inputReset,
