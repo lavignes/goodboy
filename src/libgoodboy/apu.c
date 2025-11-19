@@ -2,11 +2,11 @@
 
 #include <string.h>
 
-static const F32 PULSE_DUTY_TABLE[4][8] = {
-    {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f}, // 12.5%
-    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f}, // 25%
-    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f}, // 50%
-    {0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f}  // 75%
+static const U8 PULSE_DUTY_TABLE[4][8] = {
+    {0, 0, 0, 0, 0, 0, 0, 1}, // 12.5%
+    {1, 0, 0, 0, 0, 0, 1, 1}, // 25%
+    {1, 0, 0, 0, 1, 1, 1, 1}, // 50%
+    {0, 1, 1, 1, 1, 1, 1, 0}  // 75%
 };
 
 static INLINE void tickPulse(Pulse* pulse) {
@@ -41,7 +41,8 @@ static INLINE F32 samplePulse(Pulse* pulse) {
     if ((!pulse->active) || (!pulse->dacen)) {
         return 0.0f;
     }
-    return PULSE_DUTY_TABLE[pulse->duty][pulse->dutycnt] ? 1.0f : -1.0f;
+    U8 wav = PULSE_DUTY_TABLE[pulse->duty][pulse->dutycnt] * pulse->vol;
+    return (((F32)wav) / 7.5f) - 1.0f;
 }
 
 static INLINE F32 sampleWav() { return 0.0f; }
@@ -82,7 +83,6 @@ Bool apuTick(Apu* apu, Bus* bus) {
         }
         apu->fscnt = (apu->fscnt + 1) & 0x07;
     }
-
     if ((bus->divcnt % (CPU_FREQ_NORMAL / APU_FREQ_SAMPLE)) == 0) {
         F32 ch1   = samplePulse(&apu->ch1.pulse);
         F32 ch2   = samplePulse(&apu->ch2.pulse);
@@ -128,14 +128,20 @@ U8 apuRead(Apu* apu, U16 addr) {
     (void)apu;
     switch (addr) {
     case PORT_NR10:
+        return 0xFF;
     case PORT_NR11:
+        return (apu->ch1.pulse.duty << 6) | 0x3F;
     case PORT_NR12:
     case PORT_NR13:
+        return 0xFF;
     case PORT_NR14:
+        return (apu->ch1.pulse.lenen << 6) | 0xBF;
     case PORT_NR21:
+        return (apu->ch2.pulse.duty << 6) | 0x3F;
     case PORT_NR22:
     case PORT_NR23:
     case PORT_NR24:
+        return (apu->ch2.pulse.lenen << 6) | 0xBF;
     case PORT_NR30:
     case PORT_NR31:
     case PORT_NR32:
@@ -161,7 +167,7 @@ U8 apuRead(Apu* apu, U16 addr) {
 }
 
 void apuWrite(Apu* apu, U16 addr, U8 val) {
-    if ((!apu->enabled) && (addr != NR52_APU_ENABLE)) {
+    if ((!apu->enabled) && (addr != PORT_NR52)) {
         return;
     }
     switch (addr) {
@@ -172,15 +178,53 @@ void apuWrite(Apu* apu, U16 addr, U8 val) {
         apu->ch1.pulse.lencnt = 64 - (val & 0x3F);
         return;
     case PORT_NR12:
+        apu->ch1.pulse.envdir  = (val & 0x08) != 0;
+        apu->ch1.pulse.envpace = val & 0x07;
+        apu->ch1.pulse.volset  = val >> 4;
+        apu->ch1.pulse.dacen   = ((val >> 3) & 0x1F) != 0;
+        if (!apu->ch1.pulse.dacen) {
+            apu->ch1.pulse.active = FALSE;
+        }
+        return;
     case PORT_NR13:
+        apu->ch1.pulse.freq = (apu->ch1.pulse.freq & 0x0700) | ((U16)val);
+        return;
     case PORT_NR14:
+        apu->ch1.pulse.freq =
+            (apu->ch1.pulse.freq & 0x00FF) | (((U16)(val & 0x07)) << 8);
+        apu->ch1.pulse.lenen = (val & 0x40) != 0;
+        if ((apu->ch1.pulse.dacen) && (val & 0x80)) {
+            apu->ch1.pulse.active  = TRUE;
+            apu->ch1.pulse.freqcnt = apu->ch1.pulse.freq;
+            apu->ch1.pulse.vol     = apu->ch1.pulse.volset;
+        }
+        return;
     case PORT_NR21:
         apu->ch2.pulse.duty   = val >> 6;
         apu->ch2.pulse.lencnt = 64 - (val & 0x3F);
         return;
     case PORT_NR22:
+        apu->ch2.pulse.envdir  = (val & 0x08) != 0;
+        apu->ch2.pulse.envpace = val & 0x07;
+        apu->ch2.pulse.volset  = val >> 4;
+        apu->ch2.pulse.dacen   = ((val >> 3) & 0x1F) != 0;
+        if (!apu->ch2.pulse.dacen) {
+            apu->ch2.pulse.active = FALSE;
+        }
+        return;
     case PORT_NR23:
+        apu->ch2.pulse.freq = (apu->ch2.pulse.freq & 0x0700) | ((U16)val);
+        return;
     case PORT_NR24:
+        apu->ch2.pulse.freq =
+            (apu->ch1.pulse.freq & 0x00FF) | (((U16)(val & 0x07)) << 8);
+        apu->ch2.pulse.lenen = (val & 0x40) != 0;
+        if ((apu->ch2.pulse.dacen) && (val & 0x80)) {
+            apu->ch2.pulse.active  = TRUE;
+            apu->ch2.pulse.freqcnt = apu->ch2.pulse.freq;
+            apu->ch2.pulse.vol     = apu->ch2.pulse.volset;
+        }
+        return;
     case PORT_NR30:
     case PORT_NR31:
     case PORT_NR32:
@@ -196,7 +240,7 @@ void apuWrite(Apu* apu, U16 addr, U8 val) {
         apu->nr51 = val;
         return;
     case PORT_NR52: {
-        Bool enable = val & NR52_APU_ENABLE;
+        Bool enable = (val & NR52_APU_ENABLE) != 0;
         if (apu->enabled) {
             apu->enabled = enable;
             if (!enable) {

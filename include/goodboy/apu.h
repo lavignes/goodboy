@@ -28,8 +28,7 @@ enum {
     NR52_BIT_CH3_ACTIVE = 2,
     NR52_BIT_CH4_ACTIVE = 3,
     NR52_APU_ENABLE     = 1 << 7,
-
-    NR52_UNUSED_MASK = 0x70,
+    NR52_UNUSED_MASK    = 0x70,
 };
 
 typedef struct {
@@ -42,6 +41,10 @@ typedef struct {
     U8   duty;
     U8   dutycnt;
     U8   vol;
+    U8   volset;
+    U8   envdir;
+    U8   envpace;
+    U8   envcnt;
 } Pulse;
 
 typedef struct {
