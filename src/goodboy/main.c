@@ -214,10 +214,10 @@ int main(int argc, char* argv[]) {
         goto cleanupRenderer;
     }
     SDL_AudioSpec auspec = {
-        .freq     = APU_SAMPLE_FREQ,
+        .freq     = APU_FREQ_SAMPLE,
         .format   = AUDIO_F32SYS,
         .channels = 2,
-        .samples  = APU_BUF_SIZE / 2,
+        .samples  = APU_BUF_SIZE,
     };
     audev = SDL_OpenAudioDevice(NULL, 0, &auspec, NULL, 0);
     if (audev == 0) {

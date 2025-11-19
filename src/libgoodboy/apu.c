@@ -38,11 +38,15 @@ static INLINE void tickLen(Bool* lenen, U8* lencnt) {
 static INLINE void tickPulseEnv(Pulse* pulse) { (void)pulse; }
 
 static INLINE F32 samplePulse(Pulse* pulse) {
-    if ((!pulse->enabled) || (!pulse->dacen)) {
+    if ((!pulse->active) || (!pulse->dacen)) {
         return 0.0f;
     }
     return PULSE_DUTY_TABLE[pulse->duty][pulse->dutycnt] ? 1.0f : -1.0f;
 }
+
+static INLINE F32 sampleWav() { return 0.0f; }
+
+static INLINE F32 sampleNoise() { return 0.0f; }
 
 void apuReset(Apu* apu) { memset(apu, 0, sizeof(*apu)); }
 
@@ -51,7 +55,7 @@ Bool apuTick(Apu* apu, Bus* bus) {
     tickPulse(&apu->ch2.pulse);
     tickCh3(apu, bus);
     tickCh4(apu, bus);
-    if ((bus->divcnt % (CPU_FREQ_NORMAL / APU_FRAME_FREQ)) == 0) {
+    if ((bus->divcnt % (CPU_FREQ_NORMAL / APU_FREQ_FRAME)) == 0) {
         switch (apu->fscnt) {
         case 0:
             tickLen(&apu->ch1.pulse.lenen, &apu->ch1.pulse.lencnt);
@@ -79,11 +83,39 @@ Bool apuTick(Apu* apu, Bus* bus) {
         apu->fscnt = (apu->fscnt + 1) & 0x07;
     }
 
-    if ((bus->divcnt % (CPU_FREQ_NORMAL / APU_SAMPLE_FREQ)) == 0) {
-        apu->buf[apu->bufpos++] = samplePulse(&apu->ch1.pulse) * 0.5f +
-                                  samplePulse(&apu->ch2.pulse) * 0.5f;
-        apu->buf[apu->bufpos++] = samplePulse(&apu->ch1.pulse) * 0.5f +
-                                  samplePulse(&apu->ch2.pulse) * 0.5f;
+    if ((bus->divcnt % (CPU_FREQ_NORMAL / APU_FREQ_SAMPLE)) == 0) {
+        F32 ch1   = samplePulse(&apu->ch1.pulse);
+        F32 ch2   = samplePulse(&apu->ch2.pulse);
+        F32 ch3   = sampleWav();
+        F32 ch4   = sampleNoise();
+        F32 left  = 0.0;
+        F32 right = 0.0;
+        if (apu->nr51 & NR51_CH1_LEFT) {
+            left += ch1;
+        }
+        if (apu->nr51 & NR51_CH2_LEFT) {
+            left += ch2;
+        }
+        if (apu->nr51 & NR51_CH3_LEFT) {
+            left += ch3;
+        }
+        if (apu->nr51 & NR51_CH4_LEFT) {
+            left += ch4;
+        }
+        if (apu->nr51 & NR51_CH1_RIGHT) {
+            right += ch1;
+        }
+        if (apu->nr51 & NR51_CH2_RIGHT) {
+            right += ch2;
+        }
+        if (apu->nr51 & NR51_CH3_RIGHT) {
+            right += ch3;
+        }
+        if (apu->nr51 & NR51_CH4_RIGHT) {
+            right += ch4;
+        }
+        apu->buf[apu->bufpos++] = left / 4.0f;
+        apu->buf[apu->bufpos++] = right / 4.0f;
         if (apu->bufpos == APU_BUF_SIZE) {
             apu->bufpos = 0;
             return TRUE;
@@ -114,23 +146,38 @@ U8 apuRead(Apu* apu, U16 addr) {
     case PORT_NR43:
     case PORT_NR44:
     case PORT_NR50:
-    case PORT_NR51:
         return 0xFF;
+    case PORT_NR51:
+        return apu->nr51;
     case PORT_NR52:
-
+        return NR52_UNUSED_MASK | (apu->enabled ? NR52_APU_ENABLE : 0x00) |
+               (apu->ch1.pulse.active << NR52_BIT_CH1_ACTIVE) |
+               (apu->ch2.pulse.active << NR52_BIT_CH2_ACTIVE) |
+               (apu->ch3.active << NR52_BIT_CH3_ACTIVE) |
+               (apu->ch4.active << NR52_BIT_CH4_ACTIVE);
     default:
         UNREACHABLE();
     }
 }
 
 void apuWrite(Apu* apu, U16 addr, U8 val) {
+    if ((!apu->enabled) && (addr != NR52_APU_ENABLE)) {
+        return;
+    }
     switch (addr) {
     case PORT_NR10:
+        return;
     case PORT_NR11:
+        apu->ch1.pulse.duty   = val >> 6;
+        apu->ch1.pulse.lencnt = 64 - (val & 0x3F);
+        return;
     case PORT_NR12:
     case PORT_NR13:
     case PORT_NR14:
     case PORT_NR21:
+        apu->ch2.pulse.duty   = val >> 6;
+        apu->ch2.pulse.lencnt = 64 - (val & 0x3F);
+        return;
     case PORT_NR22:
     case PORT_NR23:
     case PORT_NR24:
@@ -144,14 +191,28 @@ void apuWrite(Apu* apu, U16 addr, U8 val) {
     case PORT_NR43:
     case PORT_NR44:
     case PORT_NR50:
+        return;
     case PORT_NR51:
+        apu->nr51 = val;
         return;
-    case PORT_NR52:
-        if ((val & NR52_APU_ENABLE) == 0) {
-            apuReset(apu);
+    case PORT_NR52: {
+        Bool enable = val & NR52_APU_ENABLE;
+        if (apu->enabled) {
+            apu->enabled = enable;
+            if (!enable) {
+                apuReset(apu);
+            }
+            return;
         }
-        // TODO: disbale writes
+        if (enable) {
+            apu->enabled           = enable;
+            apu->fscnt             = 0;
+            apu->ch1.pulse.dutycnt = 0;
+            apu->ch2.pulse.dutycnt = 0;
+            apu->ch3.wavcnt        = 0;
+        }
         return;
+    }
     default:
         UNREACHABLE();
     }
