@@ -27,7 +27,7 @@ UInt busTick(Bus* bus) {
     }
     // TODO: CGB timer speed doubling
     if (bus->divcnt >= (CPU_FREQ_NORMAL / DIV_FREQ)) {
-        bus->divcnt -= (CPU_FREQ_NORMAL / DIV_FREQ);
+        bus->divcnt -= CPU_FREQ_NORMAL / DIV_FREQ;
         ++bus->div;
     }
     if (bus->tac & TAC_ENABLE) {
