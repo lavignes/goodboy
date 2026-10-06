@@ -225,8 +225,8 @@ int main(int argc, char* argv[]) {
         goto cleanupTexture;
     }
     SDL_PauseAudioDevice(audev, 0);
-    InputState istate = {0};
-    Bus        bus    = {0};
+    InputState istate = {};
+    Bus        bus    = {};
     Int        err;
     if ((err = cartInit(&bus.cart, rompath))) {
         fprintf(stderr, "failed to init cart: %" VIEW_FMT "\n",
